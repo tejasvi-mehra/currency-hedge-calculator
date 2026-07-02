@@ -10,8 +10,10 @@ import (
 )
 
 type stubRatesProvider struct {
-	quotes map[string]rates.Quote
-	err    error
+	quotes        map[string]rates.Quote
+	historyQuotes map[string]rates.Quote
+	err           error
+	historyErr    error
 }
 
 func (s *stubRatesProvider) GetPresentmentPerSettlementRate(_ context.Context, settlementCurrency string, presentmentCurrency string) (rates.Quote, error) {
@@ -20,6 +22,14 @@ func (s *stubRatesProvider) GetPresentmentPerSettlementRate(_ context.Context, s
 	}
 	key := settlementCurrency + ":" + presentmentCurrency
 	return s.quotes[key], nil
+}
+
+func (s *stubRatesProvider) GetHistoricalPresentmentPerSettlementRate(_ context.Context, settlementCurrency string, presentmentCurrency string, _ time.Time) (rates.Quote, error) {
+	if s.historyErr != nil {
+		return rates.Quote{}, s.historyErr
+	}
+	key := settlementCurrency + ":" + presentmentCurrency
+	return s.historyQuotes[key], nil
 }
 
 type stubTransactionSource struct {
@@ -82,7 +92,7 @@ func TestServiceCalculateExposure_MixedResults(t *testing.T) {
 	}
 }
 
-func TestServiceCalculateExposure_UsesSeedSourceWhenRequested(t *testing.T) {
+func TestServiceCalculateExposure_UsesDefaultTestDataWhenRequested(t *testing.T) {
 	service := NewService(
 		&stubRatesProvider{
 			quotes: map[string]rates.Quote{
@@ -120,7 +130,7 @@ func TestServiceCalculateExposure_UsesSeedSourceWhenRequested(t *testing.T) {
 }
 
 func TestServiceCalculateExposure_ValidationError(t *testing.T) {
-	service := NewService(&stubRatesProvider{}, nil, 2, nil)
+	service := NewService(&ratesOnlyProviderStub{}, nil, 2, nil)
 
 	_, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
 		Transactions: []PendingTransaction{
@@ -139,5 +149,45 @@ func TestServiceCalculateExposure_ValidationError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrValidation) {
 		t.Fatalf("expected ErrValidation, got %v", err)
+	}
+}
+
+type ratesOnlyProviderStub struct{}
+
+func (s *ratesOnlyProviderStub) GetPresentmentPerSettlementRate(_ context.Context, _, _ string) (rates.Quote, error) {
+	return rates.Quote{}, nil
+}
+
+func TestServiceCalculateExposure_ResolvesHistoricalAuthRateWhenMissing(t *testing.T) {
+	provider := &stubRatesProvider{
+		quotes: map[string]rates.Quote{
+			"EUR:BRL": {SettlementCurrency: "EUR", PresentmentCurrency: "BRL", Rate: 6.2, Timestamp: time.Now().UTC(), Source: "test-live"},
+		},
+		historyQuotes: map[string]rates.Quote{
+			"EUR:BRL": {SettlementCurrency: "EUR", PresentmentCurrency: "BRL", Rate: 6.0, Timestamp: time.Now().UTC(), Source: "test-historical"},
+		},
+	}
+
+	service := NewService(provider, nil, 2, nil)
+	response, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
+		Transactions: []PendingTransaction{
+			{
+				TransactionID:          "TX-HIST",
+				AuthorizationTimestamp: time.Now().Add(-48 * time.Hour).UTC(),
+				AuthorizedAmount:       6200,
+				PresentmentCurrency:    "BRL",
+				SettlementCurrency:     "EUR",
+				AuthorizationRate:      0,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CalculateExposure() unexpected error: %v", err)
+	}
+	if got := response.Transactions[0].AuthorizationRate; got != 6.0 {
+		t.Fatalf("expected historical auth rate 6.0, got %v", got)
+	}
+	if got := response.Transactions[0].AuthorizationRateSource; got != "test-historical" {
+		t.Fatalf("expected historical auth source, got %q", got)
 	}
 }

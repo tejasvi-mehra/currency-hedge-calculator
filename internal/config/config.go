@@ -32,6 +32,7 @@ type ServerConfig struct {
 // FXConfig controls live rate fetching and resilience.
 type FXConfig struct {
 	BaseURL             string        `env:"FX_BASE_URL" envDefault:"https://open.er-api.com"`
+	HistoricalBaseURL   string        `env:"FX_HISTORICAL_BASE_URL" envDefault:"https://api.frankfurter.app"`
 	Timeout             time.Duration `env:"FX_TIMEOUT" envDefault:"5s"`
 	RetryMaxAttempts    int           `env:"FX_RETRY_MAX_ATTEMPTS" envDefault:"3"`
 	RetryInitial        time.Duration `env:"FX_RETRY_INITIAL" envDefault:"200ms"`
@@ -60,6 +61,7 @@ func LoadFromEnv() (Config, error) {
 	cfg.Server.ListenAddr = strings.TrimSpace(cfg.Server.ListenAddr)
 	cfg.Server.HealthPath = strings.TrimSpace(cfg.Server.HealthPath)
 	cfg.FX.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.FX.BaseURL), "/")
+	cfg.FX.HistoricalBaseURL = strings.TrimRight(strings.TrimSpace(cfg.FX.HistoricalBaseURL), "/")
 	cfg.Data.TestDataPath = strings.TrimSpace(cfg.Data.TestDataPath)
 	cfg.normalizeSupportedCurrencies()
 
@@ -71,6 +73,9 @@ func LoadFromEnv() (Config, error) {
 	}
 	if cfg.FX.BaseURL == "" {
 		return Config{}, fmt.Errorf("FX_BASE_URL must not be empty")
+	}
+	if cfg.FX.HistoricalBaseURL == "" {
+		return Config{}, fmt.Errorf("FX_HISTORICAL_BASE_URL must not be empty")
 	}
 	if cfg.FX.RetryMaxAttempts < 1 {
 		return Config{}, fmt.Errorf("FX_RETRY_MAX_ATTEMPTS must be >= 1")

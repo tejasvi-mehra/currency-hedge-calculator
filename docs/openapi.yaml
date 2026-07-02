@@ -148,7 +148,6 @@ components:
         - authorized_amount
         - presentment_currency
         - settlement_currency
-        - authorization_rate
       properties:
         transaction_id:
           type: string
@@ -171,7 +170,10 @@ components:
           type: number
           format: double
           minimum: 0
-          description: Presentment-per-settlement rate at authorization time.
+          nullable: true
+          description: |
+            Presentment-per-settlement rate at authorization time.
+            When omitted or zero, the service attempts historical-rate lookup.
         authorization_rate_source:
           type: string
         metadata:
@@ -214,6 +216,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CurrencyExposureBreakdown"
+        risky_currency_pairs:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencyPairRiskInsight"
         best_transaction:
           $ref: "#/components/schemas/TransactionExposure"
         worst_transaction:
@@ -232,6 +238,26 @@ components:
           type: integer
         loss_count:
           type: integer
+    CurrencyPairRiskInsight:
+      type: object
+      properties:
+        presentment_currency:
+          type: string
+        settlement_currency:
+          type: string
+        transaction_count:
+          type: integer
+        high_risk_count:
+          type: integer
+        total_exposure_amount:
+          type: number
+          format: double
+        average_exposure_percentage:
+          type: number
+          format: double
+        trend:
+          type: string
+          enum: [dangerous, stable_or_favorable]
     TransactionExposure:
       type: object
       properties:
@@ -262,6 +288,8 @@ components:
         authorization_rate:
           type: number
           format: double
+        authorization_rate_source:
+          type: string
         current_rate:
           type: number
           format: double

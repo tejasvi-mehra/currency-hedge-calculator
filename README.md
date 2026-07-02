@@ -22,6 +22,12 @@ Currency Hedge Calculator is a backend service that computes real-time FX exposu
   - best/worst transactions
   - risk-prioritized ranking with `capture_now` / `monitor`
 
+## Core Requirements Coverage
+
+- This repo achieves **accurate exposure calculation** by computing original settlement value from authorization-time rates, current settlement value from live rates, per-transaction deltas, and full aggregate rollups (totals, gain/loss counts, currency breakdown, best/worst).
+- This repo achieves **live FX integration with resilience** by querying external rate providers, retrying transient failures, handling unsupported pairs explicitly, and falling back to cached quotes when live calls fail.
+- This repo achieves **actionable risk ranking** by sorting transactions by loss severity, flagging threshold breaches as `capture_now`, and exposing `risky_currency_pairs` trend insights to highlight dangerous pair-level movement.
+
 ## API
 
 - `GET /healthz`
@@ -121,6 +127,7 @@ This project follows Yuno-style API and code-structure conventions:
 - consistent error envelope (`type`, `code`, `message`, `details`)
 - interface-driven boundaries for testability
 - non-business framework modules under `internal/framework`
+- historical-rate fallback for missing `authorization_rate` values
 
 ```mermaid
 flowchart LR

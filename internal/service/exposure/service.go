@@ -43,6 +43,19 @@ type Service struct {
 	logger               *zap.SugaredLogger
 }
 
+type historicalRateProvider interface {
+	GetHistoricalPresentmentPerSettlementRate(ctx context.Context, settlementCurrency string, presentmentCurrency string, at time.Time) (rates.Quote, error)
+}
+
+type pairAccumulator struct {
+	PresentmentCurrency string
+	SettlementCurrency  string
+	TransactionCount    int
+	HighRiskCount       int
+	TotalExposureAmount float64
+	ExposurePercentSum  float64
+}
+
 // NewService creates a new exposure service.
 func NewService(
 	ratesProvider rates.Provider,
@@ -93,6 +106,7 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 
 	exposures := make([]TransactionExposure, 0, len(transactions))
 	breakdown := map[string]*CurrencyExposureBreakdown{}
+	pairBreakdown := map[string]*pairAccumulator{}
 
 	var totalExposure float64
 	var gainCount int
@@ -106,12 +120,37 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			return CalculateExposureResponse{}, err
 		}
 
+		authorizationRate := transaction.AuthorizationRate
+		authorizationRateSource := strings.TrimSpace(transaction.AuthorizationRateSource)
+		if authorizationRate <= 0 {
+			historical, ok := s.ratesProvider.(historicalRateProvider)
+			if !ok {
+				return CalculateExposureResponse{}, fmt.Errorf("%w: authorization_rate is required when historical provider is unavailable for transaction %s", ErrValidation, transaction.TransactionID)
+			}
+			historicalQuote, err := historical.GetHistoricalPresentmentPerSettlementRate(
+				ctx,
+				transaction.SettlementCurrency,
+				transaction.PresentmentCurrency,
+				transaction.AuthorizationTimestamp,
+			)
+			if err != nil {
+				return CalculateExposureResponse{}, fmt.Errorf("resolve authorization rate for transaction %s: %w", transaction.TransactionID, err)
+			}
+			authorizationRate = historicalQuote.Rate
+			if authorizationRateSource == "" {
+				authorizationRateSource = historicalQuote.Source
+			}
+		}
+		if authorizationRateSource == "" {
+			authorizationRateSource = "request_payload"
+		}
+
 		quote, err := s.ratesProvider.GetPresentmentPerSettlementRate(ctx, transaction.SettlementCurrency, transaction.PresentmentCurrency)
 		if err != nil {
 			return CalculateExposureResponse{}, fmt.Errorf("fetch current rate for transaction %s: %w", transaction.TransactionID, err)
 		}
 
-		originalSettlement := transaction.AuthorizedAmount / transaction.AuthorizationRate
+		originalSettlement := transaction.AuthorizedAmount / authorizationRate
 		currentSettlement := transaction.AuthorizedAmount / quote.Rate
 		exposureAmount := currentSettlement - originalSettlement
 
@@ -155,6 +194,22 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			group.LossCount++
 		}
 
+		pairKey := strings.ToUpper(strings.TrimSpace(transaction.PresentmentCurrency)) + ":" + strings.ToUpper(strings.TrimSpace(transaction.SettlementCurrency))
+		pairGroup, exists := pairBreakdown[pairKey]
+		if !exists {
+			pairGroup = &pairAccumulator{
+				PresentmentCurrency: strings.ToUpper(strings.TrimSpace(transaction.PresentmentCurrency)),
+				SettlementCurrency:  strings.ToUpper(strings.TrimSpace(transaction.SettlementCurrency)),
+			}
+			pairBreakdown[pairKey] = pairGroup
+		}
+		pairGroup.TransactionCount++
+		pairGroup.TotalExposureAmount += exposureAmount
+		pairGroup.ExposurePercentSum += exposurePercentage
+		if isHighRisk {
+			pairGroup.HighRiskCount++
+		}
+
 		exposureItem := TransactionExposure{
 			TransactionID:            transaction.TransactionID,
 			AuthorizationTimestamp:   transaction.AuthorizationTimestamp,
@@ -165,7 +220,8 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			CurrentSettlementAmount:  round(currentSettlement),
 			ExposureAmount:           round(exposureAmount),
 			ExposurePercentage:       round(exposurePercentage),
-			AuthorizationRate:        transaction.AuthorizationRate,
+			AuthorizationRate:        authorizationRate,
+			AuthorizationRateSource:  authorizationRateSource,
 			CurrentRate:              quote.Rate,
 			CurrentRateTimestamp:     quote.Timestamp,
 			CurrentRateSource:        quote.Source,
@@ -209,6 +265,30 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 		})
 	}
 
+	riskyPairs := make([]CurrencyPairRiskInsight, 0, len(pairBreakdown))
+	for _, pair := range pairBreakdown {
+		averageExposurePct := pair.ExposurePercentSum / float64(pair.TransactionCount)
+		trend := "stable_or_favorable"
+		if pair.HighRiskCount > 0 || averageExposurePct <= (-1*threshold) {
+			trend = "dangerous"
+		}
+		riskyPairs = append(riskyPairs, CurrencyPairRiskInsight{
+			PresentmentCurrency:    pair.PresentmentCurrency,
+			SettlementCurrency:     pair.SettlementCurrency,
+			TransactionCount:       pair.TransactionCount,
+			HighRiskCount:          pair.HighRiskCount,
+			TotalExposureAmount:    round(pair.TotalExposureAmount),
+			AverageExposurePercent: round(averageExposurePct),
+			Trend:                  trend,
+		})
+	}
+	sort.Slice(riskyPairs, func(i, j int) bool {
+		if riskyPairs[i].HighRiskCount == riskyPairs[j].HighRiskCount {
+			return riskyPairs[i].AverageExposurePercent < riskyPairs[j].AverageExposurePercent
+		}
+		return riskyPairs[i].HighRiskCount > riskyPairs[j].HighRiskCount
+	})
+
 	response := CalculateExposureResponse{
 		Summary: ExposureSummary{
 			GeneratedAt:               s.clock.Now(),
@@ -219,6 +299,7 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			HighRiskCount:             highRiskCount,
 			StaleRateTransactionCount: staleRateCount,
 			CurrencyBreakdown:         currencyBreakdown,
+			RiskyCurrencyPairs:        riskyPairs,
 		},
 		Transactions: sortedExposures,
 		Ranking:      ranking,
@@ -250,9 +331,6 @@ func validateTransaction(transaction PendingTransaction) error {
 	}
 	if strings.TrimSpace(transaction.SettlementCurrency) == "" {
 		return fmt.Errorf("%w: settlement_currency is required for transaction %s", ErrValidation, transactionID)
-	}
-	if transaction.AuthorizationRate <= 0 {
-		return fmt.Errorf("%w: authorization_rate must be > 0 for transaction %s", ErrValidation, transactionID)
 	}
 	return nil
 }
