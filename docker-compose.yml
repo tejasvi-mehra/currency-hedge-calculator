@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: currency-hedge-calculator:local
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: info
+      LOG_ENCODING: console
+      SERVER_LISTEN_ADDR: :8080
+      FX_BASE_URL: https://open.er-api.com
+      FX_TIMEOUT: 5s
+      FX_RETRY_MAX_ATTEMPTS: 3
+      FX_RETRY_INITIAL: 200ms
+      FX_RETRY_MAX: 2s
+      FX_CACHE_TTL: 5m
+      FX_SUPPORTED_CURRENCIES: USD,EUR,BRL,MXN,COP,ARS,CLP
+      EXPOSURE_DEFAULT_RISK_THRESHOLD_PERCENTAGE: 2
+      DATA_SEED_PATH: data/pending_transactions.json
