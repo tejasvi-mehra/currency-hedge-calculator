@@ -1,0 +1,279 @@
+openapi: 3.1.0
+info:
+  title: Currency Exposure Calculator API
+  version: "1.0.0"
+  description: |
+    Calculates real-time currency exposure for authorized-but-not-captured transactions.
+    Rates are fetched from a live external FX API.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+  /v1/exposure/calculate:
+    post:
+      summary: Calculate per-transaction and aggregate FX exposure
+      operationId: calculateExposure
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional idempotency key for safe retries.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculateExposureRequest"
+            examples:
+              standard:
+                value:
+                  risk_threshold_percentage: 2
+                  transactions:
+                    - transaction_id: TXN-1001
+                      authorization_timestamp: "2026-06-20T10:30:00Z"
+                      authorized_amount: 14400
+                      presentment_currency: BRL
+                      settlement_currency: EUR
+                      authorization_rate: 6.0
+      responses:
+        "200":
+          description: Exposure successfully calculated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalculateExposureResponse"
+        "400":
+          description: Invalid request payload or unsupported input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Live rate unavailable from upstream API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    CalculateExposureRequest:
+      type: object
+      properties:
+        risk_threshold_percentage:
+          type: number
+          format: double
+          minimum: 0
+          default: 2
+        use_seed_data_when_empty_input:
+          type: boolean
+          default: false
+          description: |
+            If true and transactions are omitted, the service loads pending transactions
+            from the configured seed file.
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingTransaction"
+    PendingTransaction:
+      type: object
+      required:
+        - transaction_id
+        - authorization_timestamp
+        - authorized_amount
+        - presentment_currency
+        - settlement_currency
+        - authorization_rate
+      properties:
+        transaction_id:
+          type: string
+        authorization_timestamp:
+          type: string
+          format: date-time
+        authorized_amount:
+          type: number
+          format: double
+          minimum: 0
+        presentment_currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        settlement_currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        authorization_rate:
+          type: number
+          format: double
+          minimum: 0
+          description: Presentment-per-settlement rate at authorization time.
+        authorization_rate_source:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    CalculateExposureResponse:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/ExposureSummary"
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionExposure"
+        ranking:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskRankingItem"
+    ExposureSummary:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        total_exposure_amount:
+          type: number
+          format: double
+        gain_count:
+          type: integer
+        loss_count:
+          type: integer
+        neutral_count:
+          type: integer
+        high_risk_count:
+          type: integer
+        stale_rate_transaction_count:
+          type: integer
+        currency_breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencyExposureBreakdown"
+        best_transaction:
+          $ref: "#/components/schemas/TransactionExposure"
+        worst_transaction:
+          $ref: "#/components/schemas/TransactionExposure"
+    CurrencyExposureBreakdown:
+      type: object
+      properties:
+        presentment_currency:
+          type: string
+        total_exposure_amount:
+          type: number
+          format: double
+        transaction_count:
+          type: integer
+        gain_count:
+          type: integer
+        loss_count:
+          type: integer
+    TransactionExposure:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        authorization_timestamp:
+          type: string
+          format: date-time
+        presentment_currency:
+          type: string
+        settlement_currency:
+          type: string
+        authorized_amount:
+          type: number
+          format: double
+        original_settlement_amount:
+          type: number
+          format: double
+        current_settlement_amount:
+          type: number
+          format: double
+        exposure_amount:
+          type: number
+          format: double
+        exposure_percentage:
+          type: number
+          format: double
+        authorization_rate:
+          type: number
+          format: double
+        current_rate:
+          type: number
+          format: double
+        current_rate_timestamp:
+          type: string
+          format: date-time
+        current_rate_source:
+          type: string
+        is_stale_rate:
+          type: boolean
+        is_high_risk:
+          type: boolean
+        recommendation:
+          type: string
+          enum: [capture_now, monitor]
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    RiskRankingItem:
+      type: object
+      properties:
+        rank:
+          type: integer
+        transaction_id:
+          type: string
+        presentment_currency:
+          type: string
+        settlement_currency:
+          type: string
+        exposure_amount:
+          type: number
+          format: double
+        exposure_percentage:
+          type: number
+          format: double
+        is_high_risk:
+          type: boolean
+        recommendation:
+          type: string
+          enum: [capture_now, monitor]
+    ErrorResponse:
+      type: object
+      required:
+        - type
+        - code
+        - message
+      properties:
+        type:
+          type: string
+          example: validation_error
+        code:
+          type: string
+          example: INVALID_REQUEST_BODY
+        message:
+          type: string
+          example: request body must be a valid JSON object
+        details:
+          type: object
+          additionalProperties: true

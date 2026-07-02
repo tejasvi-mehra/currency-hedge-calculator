@@ -1,0 +1,23 @@
+{
+  "risk_threshold_percentage": 2,
+  "transactions": [
+    {
+      "transaction_id": "TXN-DEMO-001",
+      "authorization_timestamp": "2026-06-20T10:30:00Z",
+      "authorized_amount": 14400,
+      "presentment_currency": "BRL",
+      "settlement_currency": "EUR",
+      "authorization_rate": 6.0,
+      "authorization_rate_source": "seed_data"
+    },
+    {
+      "transaction_id": "TXN-DEMO-002",
+      "authorization_timestamp": "2026-06-25T14:00:00Z",
+      "authorized_amount": 17000,
+      "presentment_currency": "MXN",
+      "settlement_currency": "USD",
+      "authorization_rate": 18.0,
+      "authorization_rate_source": "seed_data"
+    }
+  ]
+}
