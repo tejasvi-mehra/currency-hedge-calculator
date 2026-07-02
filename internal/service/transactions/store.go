@@ -10,7 +10,7 @@ import (
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/service/exposure"
 )
 
-// FileStore keeps pending transactions loaded from a JSON seed file.
+// FileStore keeps pending transactions loaded from a JSON test data file.
 type FileStore struct {
 	mu           sync.RWMutex
 	transactions []exposure.PendingTransaction
@@ -20,12 +20,12 @@ type FileStore struct {
 func NewFileStore(path string) (*FileStore, error) {
 	rawData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read seed data: %w", err)
+		return nil, fmt.Errorf("read test data: %w", err)
 	}
 
 	var transactions []exposure.PendingTransaction
 	if err := json.Unmarshal(rawData, &transactions); err != nil {
-		return nil, fmt.Errorf("decode seed data: %w", err)
+		return nil, fmt.Errorf("decode test data: %w", err)
 	}
 
 	return &FileStore{transactions: transactions}, nil

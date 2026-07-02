@@ -8,7 +8,7 @@
       "presentment_currency": "BRL",
       "settlement_currency": "EUR",
       "authorization_rate": 6.0,
-      "authorization_rate_source": "seed_data"
+      "authorization_rate_source": "analytics_test_data"
     },
     {
       "transaction_id": "TXN-DEMO-002",
@@ -17,7 +17,7 @@
       "presentment_currency": "MXN",
       "settlement_currency": "USD",
       "authorization_rate": 18.0,
-      "authorization_rate_source": "seed_data"
+      "authorization_rate_source": "analytics_test_data"
     }
   ]
 }

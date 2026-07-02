@@ -16,9 +16,9 @@ type PendingTransaction struct {
 
 // CalculateExposureRequest is the API payload for exposure calculations.
 type CalculateExposureRequest struct {
-	Transactions              []PendingTransaction `json:"transactions"`
-	RiskThresholdPercentage   *float64             `json:"risk_threshold_percentage,omitempty"`
-	UseSeedDataWhenEmptyInput bool                 `json:"use_seed_data_when_empty_input,omitempty"`
+	Transactions                     []PendingTransaction `json:"transactions"`
+	RiskThresholdPercentage          *float64             `json:"risk_threshold_percentage,omitempty"`
+	UseDefaultTestDataWhenEmptyInput bool                 `json:"use_default_test_data_when_empty_input,omitempty"`
 }
 
 // CalculateExposureResponse contains per-transaction and aggregate exposure output.

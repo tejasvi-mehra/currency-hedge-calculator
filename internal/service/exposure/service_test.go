@@ -106,7 +106,7 @@ func TestServiceCalculateExposure_UsesSeedSourceWhenRequested(t *testing.T) {
 	)
 
 	response, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
-		UseSeedDataWhenEmptyInput: true,
+		UseDefaultTestDataWhenEmptyInput: true,
 	})
 	if err != nil {
 		t.Fatalf("CalculateExposure() unexpected error: %v", err)

@@ -12,7 +12,7 @@
 - `runner.Runnable`
 
 ## Decisions and Trade-offs
-- Used only framework pieces required by challenge acceptance criteria.
+- Used only framework pieces required by current service scope.
 
 ## Next Agent Checklist
 - Keep framework packages business-agnostic.

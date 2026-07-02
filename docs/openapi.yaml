@@ -85,12 +85,12 @@ components:
           format: double
           minimum: 0
           default: 2
-        use_seed_data_when_empty_input:
+        use_default_test_data_when_empty_input:
           type: boolean
           default: false
           description: |
             If true and transactions are omitted, the service loads pending transactions
-            from the configured seed file.
+            from the configured default test data file.
         transactions:
           type: array
           items:

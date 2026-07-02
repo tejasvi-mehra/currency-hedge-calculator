@@ -41,7 +41,7 @@ func NewApp(cfg config.Config, logger *zap.SugaredLogger) (*App, error) {
 		logger.Named("service.rates"),
 	)
 
-	store, err := transactions.NewFileStore(cfg.Data.SeedPath)
+	store, err := transactions.NewFileStore(cfg.Data.TestDataPath)
 	if err != nil {
 		return nil, fmt.Errorf("build transaction store: %w", err)
 	}

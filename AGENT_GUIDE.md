@@ -14,8 +14,8 @@
 - `framework/server.Context`
 
 ## Decisions and Trade-offs
-- Focused on one core endpoint for challenge speed.
-- Used seed data + in-memory loading instead of DB persistence.
+- Focused on one core endpoint first for predictable delivery.
+- Used default test data + in-memory loading instead of DB persistence.
 
 ## Next Agent Checklist
 - Run `go test ./...`.

@@ -69,9 +69,9 @@ func NewService(
 // CalculateExposure computes transaction-level and aggregate exposure metrics.
 func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposureRequest) (CalculateExposureResponse, error) {
 	transactions := request.Transactions
-	if len(transactions) == 0 && request.UseSeedDataWhenEmptyInput {
+	if len(transactions) == 0 && request.UseDefaultTestDataWhenEmptyInput {
 		if s.transactionSource == nil {
-			return CalculateExposureResponse{}, fmt.Errorf("%w: seed data unavailable", ErrNoTransactions)
+			return CalculateExposureResponse{}, fmt.Errorf("%w: default test data unavailable", ErrNoTransactions)
 		}
 		var err error
 		transactions, err = s.transactionSource.ListPending(ctx)

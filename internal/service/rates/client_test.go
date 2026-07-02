@@ -75,7 +75,7 @@ func TestLiveProvider_StaleCacheFallback(t *testing.T) {
 		PresentmentCurrency: "MXN",
 		Rate:                17.9,
 		Timestamp:           time.Now().Add(-10 * time.Minute).UTC(),
-		Source:              "seed-stale",
+		Source:              "test-stale",
 	})
 	time.Sleep(2 * time.Nanosecond)
 

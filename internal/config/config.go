@@ -45,9 +45,9 @@ type ExposureConfig struct {
 	DefaultRiskThresholdPercentage float64 `env:"EXPOSURE_DEFAULT_RISK_THRESHOLD_PERCENTAGE" envDefault:"2"`
 }
 
-// DataConfig controls test and seed data sources.
+// DataConfig controls default test data sources.
 type DataConfig struct {
-	SeedPath string `env:"DATA_SEED_PATH" envDefault:"data/pending_transactions.json"`
+	TestDataPath string `env:"DATA_TEST_DATA_PATH" envDefault:"data/analytics_test_transactions.json"`
 }
 
 // LoadFromEnv parses and validates runtime configuration.
@@ -60,7 +60,7 @@ func LoadFromEnv() (Config, error) {
 	cfg.Server.ListenAddr = strings.TrimSpace(cfg.Server.ListenAddr)
 	cfg.Server.HealthPath = strings.TrimSpace(cfg.Server.HealthPath)
 	cfg.FX.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.FX.BaseURL), "/")
-	cfg.Data.SeedPath = strings.TrimSpace(cfg.Data.SeedPath)
+	cfg.Data.TestDataPath = strings.TrimSpace(cfg.Data.TestDataPath)
 	cfg.normalizeSupportedCurrencies()
 
 	if cfg.Server.ListenAddr == "" {
@@ -84,8 +84,8 @@ func LoadFromEnv() (Config, error) {
 	if cfg.Exposure.DefaultRiskThresholdPercentage < 0 {
 		return Config{}, fmt.Errorf("EXPOSURE_DEFAULT_RISK_THRESHOLD_PERCENTAGE must be >= 0")
 	}
-	if cfg.Data.SeedPath == "" {
-		return Config{}, fmt.Errorf("DATA_SEED_PATH must not be empty")
+	if cfg.Data.TestDataPath == "" {
+		return Config{}, fmt.Errorf("DATA_TEST_DATA_PATH must not be empty")
 	}
 
 	return cfg, nil

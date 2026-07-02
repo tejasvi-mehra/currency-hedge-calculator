@@ -52,7 +52,7 @@ func (h *Handler) calculate(ctx server.Context) error {
 	}
 
 	if len(request.Transactions) == 0 {
-		request.UseSeedDataWhenEmptyInput = true
+		request.UseDefaultTestDataWhenEmptyInput = true
 	}
 
 	response, err := h.service.CalculateExposure(ctx.RequestContext(), request)
