@@ -32,6 +32,7 @@ type ServerConfig struct {
 // FXConfig controls live rate fetching and resilience.
 type FXConfig struct {
 	BaseURL             string        `env:"FX_BASE_URL" envDefault:"https://open.er-api.com"`
+	HistoricalBaseURL   string        `env:"FX_HISTORICAL_BASE_URL" envDefault:"https://api.frankfurter.app"`
 	Timeout             time.Duration `env:"FX_TIMEOUT" envDefault:"5s"`
 	RetryMaxAttempts    int           `env:"FX_RETRY_MAX_ATTEMPTS" envDefault:"3"`
 	RetryInitial        time.Duration `env:"FX_RETRY_INITIAL" envDefault:"200ms"`
@@ -45,9 +46,9 @@ type ExposureConfig struct {
 	DefaultRiskThresholdPercentage float64 `env:"EXPOSURE_DEFAULT_RISK_THRESHOLD_PERCENTAGE" envDefault:"2"`
 }
 
-// DataConfig controls test and seed data sources.
+// DataConfig controls default test data sources.
 type DataConfig struct {
-	SeedPath string `env:"DATA_SEED_PATH" envDefault:"data/pending_transactions.json"`
+	TestDataPath string `env:"DATA_TEST_DATA_PATH" envDefault:"data/analytics_test_transactions.json"`
 }
 
 // LoadFromEnv parses and validates runtime configuration.
@@ -60,7 +61,8 @@ func LoadFromEnv() (Config, error) {
 	cfg.Server.ListenAddr = strings.TrimSpace(cfg.Server.ListenAddr)
 	cfg.Server.HealthPath = strings.TrimSpace(cfg.Server.HealthPath)
 	cfg.FX.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.FX.BaseURL), "/")
-	cfg.Data.SeedPath = strings.TrimSpace(cfg.Data.SeedPath)
+	cfg.FX.HistoricalBaseURL = strings.TrimRight(strings.TrimSpace(cfg.FX.HistoricalBaseURL), "/")
+	cfg.Data.TestDataPath = strings.TrimSpace(cfg.Data.TestDataPath)
 	cfg.normalizeSupportedCurrencies()
 
 	if cfg.Server.ListenAddr == "" {
@@ -71,6 +73,9 @@ func LoadFromEnv() (Config, error) {
 	}
 	if cfg.FX.BaseURL == "" {
 		return Config{}, fmt.Errorf("FX_BASE_URL must not be empty")
+	}
+	if cfg.FX.HistoricalBaseURL == "" {
+		return Config{}, fmt.Errorf("FX_HISTORICAL_BASE_URL must not be empty")
 	}
 	if cfg.FX.RetryMaxAttempts < 1 {
 		return Config{}, fmt.Errorf("FX_RETRY_MAX_ATTEMPTS must be >= 1")
@@ -84,8 +89,8 @@ func LoadFromEnv() (Config, error) {
 	if cfg.Exposure.DefaultRiskThresholdPercentage < 0 {
 		return Config{}, fmt.Errorf("EXPOSURE_DEFAULT_RISK_THRESHOLD_PERCENTAGE must be >= 0")
 	}
-	if cfg.Data.SeedPath == "" {
-		return Config{}, fmt.Errorf("DATA_SEED_PATH must not be empty")
+	if cfg.Data.TestDataPath == "" {
+		return Config{}, fmt.Errorf("DATA_TEST_DATA_PATH must not be empty")
 	}
 
 	return cfg, nil

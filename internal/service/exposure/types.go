@@ -16,9 +16,9 @@ type PendingTransaction struct {
 
 // CalculateExposureRequest is the API payload for exposure calculations.
 type CalculateExposureRequest struct {
-	Transactions              []PendingTransaction `json:"transactions"`
-	RiskThresholdPercentage   *float64             `json:"risk_threshold_percentage,omitempty"`
-	UseSeedDataWhenEmptyInput bool                 `json:"use_seed_data_when_empty_input,omitempty"`
+	Transactions                     []PendingTransaction `json:"transactions"`
+	RiskThresholdPercentage          *float64             `json:"risk_threshold_percentage,omitempty"`
+	UseDefaultTestDataWhenEmptyInput bool                 `json:"use_default_test_data_when_empty_input,omitempty"`
 }
 
 // CalculateExposureResponse contains per-transaction and aggregate exposure output.
@@ -38,8 +38,20 @@ type ExposureSummary struct {
 	HighRiskCount             int                         `json:"high_risk_count"`
 	StaleRateTransactionCount int                         `json:"stale_rate_transaction_count"`
 	CurrencyBreakdown         []CurrencyExposureBreakdown `json:"currency_breakdown"`
+	RiskyCurrencyPairs        []CurrencyPairRiskInsight   `json:"risky_currency_pairs"`
 	BestTransaction           *TransactionExposure        `json:"best_transaction,omitempty"`
 	WorstTransaction          *TransactionExposure        `json:"worst_transaction,omitempty"`
+}
+
+// CurrencyPairRiskInsight summarizes risk for a presentment/settlement pair.
+type CurrencyPairRiskInsight struct {
+	PresentmentCurrency    string  `json:"presentment_currency"`
+	SettlementCurrency     string  `json:"settlement_currency"`
+	TransactionCount       int     `json:"transaction_count"`
+	HighRiskCount          int     `json:"high_risk_count"`
+	TotalExposureAmount    float64 `json:"total_exposure_amount"`
+	AverageExposurePercent float64 `json:"average_exposure_percentage"`
+	Trend                  string  `json:"trend"`
 }
 
 // CurrencyExposureBreakdown summarizes exposure grouped by presentment currency.
@@ -63,6 +75,7 @@ type TransactionExposure struct {
 	ExposureAmount           float64           `json:"exposure_amount"`
 	ExposurePercentage       float64           `json:"exposure_percentage"`
 	AuthorizationRate        float64           `json:"authorization_rate"`
+	AuthorizationRateSource  string            `json:"authorization_rate_source,omitempty"`
 	CurrentRate              float64           `json:"current_rate"`
 	CurrentRateTimestamp     time.Time         `json:"current_rate_timestamp"`
 	CurrentRateSource        string            `json:"current_rate_source"`

@@ -31,6 +31,7 @@ func NewHandler(service *Service, logger *zap.SugaredLogger) *Handler {
 // Register binds exposure routes into the shared framework server.
 func (h *Handler) Register(apiServer *server.Server, healthPath string) {
 	apiServer.POST("/v1/exposure/calculate", h.calculate)
+	apiServer.POST("/v1/exposure/calculate/test", h.calculateWithDefaultTestData)
 	apiServer.GET(healthPath, h.healthz)
 }
 
@@ -51,9 +52,32 @@ func (h *Handler) calculate(ctx server.Context) error {
 		}
 	}
 
-	if len(request.Transactions) == 0 {
-		request.UseSeedDataWhenEmptyInput = true
+	response, err := h.service.CalculateExposure(ctx.RequestContext(), request)
+	if err != nil {
+		return h.writeServiceError(ctx, err)
 	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// calculateWithDefaultTestData handles test-only exposure runs backed by configured test data.
+func (h *Handler) calculateWithDefaultTestData(ctx server.Context) error {
+	request := CalculateExposureRequest{}
+	if err := ctx.Bind(&request); err != nil {
+		if !errors.Is(err, io.EOF) {
+			h.logger.Warnw("invalid test calculate request payload", "error", err)
+			return ctx.JSON(http.StatusBadRequest, ErrorResponse{
+				Type:    "validation_error",
+				Code:    "INVALID_REQUEST_BODY",
+				Message: "request body must be a valid JSON object",
+				Details: map[string]any{"error": err.Error()},
+			})
+		}
+	}
+
+	// Test endpoint always ignores request transactions and loads from test data source.
+	request.Transactions = nil
+	request.UseDefaultTestDataWhenEmptyInput = true
 
 	response, err := h.service.CalculateExposure(ctx.RequestContext(), request)
 	if err != nil {

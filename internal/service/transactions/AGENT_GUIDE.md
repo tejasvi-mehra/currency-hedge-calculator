@@ -10,7 +10,7 @@
 - `FileStore.ListPending(...)`
 
 ## Decisions and Trade-offs
-- Startup file load is sufficient for challenge scope and deterministic demos.
+- Startup file load is sufficient for deterministic demos and analytics replay.
 
 ## Next Agent Checklist
 - Keep returned slices copied to avoid shared mutable state bugs.

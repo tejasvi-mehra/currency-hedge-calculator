@@ -21,6 +21,13 @@ type erAPIResponse struct {
 	Rates              map[string]float64 `json:"rates"`
 }
 
+type frankfurterHistoricalResponse struct {
+	Amount float64            `json:"amount"`
+	Base   string             `json:"base"`
+	Date   string             `json:"date"`
+	Rates  map[string]float64 `json:"rates"`
+}
+
 // LiveProvider fetches FX rates from a public API with retry and stale-cache fallback.
 type LiveProvider struct {
 	cfg           config.FXConfig
@@ -107,6 +114,51 @@ func (p *LiveProvider) GetPresentmentPerSettlementRate(ctx context.Context, sett
 	return Quote{}, fmt.Errorf("%w: %v", ErrRateUnavailable, err)
 }
 
+// GetHistoricalPresentmentPerSettlementRate resolves auth-time rate using a historical provider.
+func (p *LiveProvider) GetHistoricalPresentmentPerSettlementRate(ctx context.Context, settlementCurrency string, presentmentCurrency string, at time.Time) (Quote, error) {
+	settlement := normalizeCurrency(settlementCurrency)
+	presentment := normalizeCurrency(presentmentCurrency)
+
+	if settlement == "" || presentment == "" {
+		return Quote{}, fmt.Errorf("%w: empty currency code", ErrUnsupportedCurrencyPair)
+	}
+	if settlement == presentment {
+		return Quote{
+			SettlementCurrency:  settlement,
+			PresentmentCurrency: presentment,
+			Rate:                1,
+			Timestamp:           at.UTC(),
+			Source:              "identity-historical",
+			Stale:               false,
+		}, nil
+	}
+	if err := p.validateCurrencyPair(settlement, presentment); err != nil {
+		return Quote{}, err
+	}
+
+	attempts := p.cfg.RetryMaxAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		quote, err := p.fetchHistoricalOnce(ctx, settlement, presentment, at)
+		if err == nil {
+			return quote, nil
+		}
+		lastErr = err
+
+		if !isRetryable(err) || attempt == attempts {
+			break
+		}
+		if waitErr := backoff.Sleep(ctx, p.retryStrategy, attempt); waitErr != nil {
+			return Quote{}, waitErr
+		}
+	}
+	return Quote{}, fmt.Errorf("%w: %v", ErrRateUnavailable, lastErr)
+}
+
 func (p *LiveProvider) fetchWithRetry(ctx context.Context, settlement string, presentment string) (Quote, error) {
 	attempts := p.cfg.RetryMaxAttempts
 	if attempts < 1 {
@@ -166,6 +218,29 @@ func (p *LiveProvider) fetchOnce(ctx context.Context, settlement string, present
 		Rate:                rate,
 		Timestamp:           timestamp,
 		Source:              "open-er-api",
+		Stale:               false,
+	}, nil
+}
+
+func (p *LiveProvider) fetchHistoricalOnce(ctx context.Context, settlement string, presentment string, at time.Time) (Quote, error) {
+	day := at.UTC().Format("2006-01-02")
+	endpoint := fmt.Sprintf("%s/%s?from=%s&to=%s", p.cfg.HistoricalBaseURL, day, settlement, presentment)
+	response := frankfurterHistoricalResponse{}
+
+	if err := p.httpConnector.GetJSON(ctx, endpoint, nil, &response); err != nil {
+		return Quote{}, err
+	}
+
+	rate, ok := response.Rates[presentment]
+	if !ok || rate <= 0 {
+		return Quote{}, fmt.Errorf("%w: %s/%s not found for %s", ErrUnsupportedCurrencyPair, settlement, presentment, day)
+	}
+	return Quote{
+		SettlementCurrency:  settlement,
+		PresentmentCurrency: presentment,
+		Rate:                rate,
+		Timestamp:           at.UTC(),
+		Source:              "frankfurter-historical",
 		Stale:               false,
 	}, nil
 }

@@ -10,7 +10,7 @@
 - Workflow entrypoints under `.github/workflows`.
 
 ## Decisions and Trade-offs
-- Added only required CI gate for challenge speed.
+- Added only the required CI gate for fast, reliable iteration.
 
 ## Next Agent Checklist
 - Keep CI fast and deterministic for reviewer confidence.

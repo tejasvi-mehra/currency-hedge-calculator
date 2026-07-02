@@ -1,50 +1,46 @@
-# Currency Hedge Calculator (Go)
+# Currency Hedge Calculator
 
-Backend MVP for Nebula Travel's currency exposure challenge.  
-It calculates real-time FX exposure for authorized-but-not-captured transactions, ranks risk, and helps payment ops decide what to capture first.
+Currency Hedge Calculator is a backend service that computes real-time FX exposure for authorized-but-not-captured payments and returns actionable risk rankings.
+
+## Production Deployment
+
+- Railway URL: [`https://currency-hedge-calculator-production.up.railway.app/`](https://currency-hedge-calculator-production.up.railway.app/)
 
 ## What This Service Does
 
-- Accepts pending transactions (auth-only, not captured).
-- Fetches live FX rates from a public external API (`open.er-api.com`).
-- Calculates per-transaction exposure:
-  - original settlement value (at auth-time rate)
-  - current settlement value (at current live rate)
-  - exposure amount and exposure percentage
-- Produces aggregate metrics:
+- Accepts pending transactions through an API.
+- Fetches live FX rates from `open.er-api.com`.
+- Calculates, per transaction:
+  - original settlement amount (auth-time rate)
+  - current settlement amount (live rate)
+  - exposure amount
+  - exposure percentage
+- Returns aggregate analytics:
   - total exposure
-  - gain/loss counts
-  - presentment-currency breakdown
-  - best and worst transactions
-- Generates an actionable ranking with a loss threshold (`capture_now` vs `monitor`).
+  - gain/loss/neutral counts
+  - per-currency exposure breakdown
+  - best/worst transactions
+  - risk-prioritized ranking with `capture_now` / `monitor`
 
-## Domain Rate Convention
+## Core Requirements Coverage
 
-To match the challenge example, rates use **presentment-per-settlement** convention:
+- This repo achieves **accurate exposure calculation** by computing original settlement value from authorization-time rates, current settlement value from live rates, per-transaction deltas, and full aggregate rollups (totals, gain/loss counts, currency breakdown, best/worst).
+- This repo achieves **live FX integration with resilience** by querying external rate providers, retrying transient failures, handling unsupported pairs explicitly, and falling back to cached quotes when live calls fail.
+- This repo achieves **actionable risk ranking** by sorting transactions by loss severity, flagging threshold breaches as `capture_now`, and exposing `risky_currency_pairs` trend insights to highlight dangerous pair-level movement.
 
-- `authorization_rate` = how many units of presentment currency equal 1 unit of settlement currency.
-- Example: BRL/EUR = `6.0`.
-- Settlement value formula: `settlement_value = authorized_amount / rate`.
-
-## API Endpoints
+## API
 
 - `GET /healthz`
-- `POST /v1/exposure/calculate`
+- `POST /v1/exposure/calculate` (production endpoint)
+- `POST /v1/exposure/calculate/test` (test endpoint; loads analytics test data at call time)
 
-OpenAPI spec: [`docs/openapi.yaml`](docs/openapi.yaml)
+OpenAPI contract: [`docs/openapi.yaml`](docs/openapi.yaml)
 
 Example payloads:
 - Request: [`docs/example-request.json`](docs/example-request.json)
 - Response: [`docs/example-response.json`](docs/example-response.json)
 
-## Quick Start (Local)
-
-### Prerequisites
-
-- Go 1.24+
-- Optional: Docker + Docker Compose
-
-### Run locally
+## Local Run
 
 ```bash
 cp .env.example .env
@@ -52,34 +48,48 @@ go mod tidy
 make run-env
 ```
 
-Server starts at `http://localhost:8080`.
+- App runs at `http://localhost:8080`.
+- `make run-env` exports values from `.env` into runtime env vars before `go run .`.
 
-`make run-env` loads variables from `.env` and exports them into the process environment before `go run .`.
-
-### Run tests
+### Run Tests
 
 ```bash
 go test ./...
 ```
 
-## Quick Start (Docker)
-
-### Build and run image
+## Docker Run
 
 ```bash
 docker build -t currency-hedge-calculator:local .
 docker run --rm -p 8080:8080 currency-hedge-calculator:local
 ```
 
-### Docker Compose
+or:
 
 ```bash
 docker compose up --build
 ```
 
+## Analytics Test Data
+
+This repository includes API-callable test data for analytics and real-world style validation.
+
+- Transaction dataset: [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
+- Test endpoint call:
+
+```bash
+make analytics-local
+```
+
+Use a remote URL if needed:
+
+```bash
+API_URL=https://currency-hedge-calculator-production.up.railway.app make analytics-local
+```
+
 ## API Usage
 
-### 1) Calculate exposure with explicit transactions
+### Explicit request payload
 
 ```bash
 curl --request POST \
@@ -89,7 +99,7 @@ curl --request POST \
   --data @docs/example-request.json
 ```
 
-### 2) Use seeded data fallback (empty body)
+### Empty payload behavior (production endpoint)
 
 ```bash
 curl --request POST \
@@ -98,54 +108,26 @@ curl --request POST \
   --data '{}'
 ```
 
-## Seed Data
+Returns `400` with `NO_TRANSACTIONS`.
 
-- File: [`data/pending_transactions.json`](data/pending_transactions.json)
-- Size: **50 transactions**
-- Coverage:
-  - BRL: 12
-  - MXN: 12
-  - COP: 12
-  - ARS: 5
-  - CLP: 4
-  - EUR: 3
-  - USD: 2
-- Includes high-value and 25+ day old authorization cases.
+### Test endpoint (loads analytics dataset on call)
+
+```bash
+curl --request POST \
+  --url http://localhost:8080/v1/exposure/calculate/test \
+  --header 'Content-Type: application/json' \
+  --data '{"risk_threshold_percentage":2}'
+```
 
 ## Architecture
 
-This project follows Yuno-style principles for API consistency and maintainability:
+This project follows Yuno-style API and code-structure conventions:
 
-- `snake_case` API fields
+- `snake_case` payload fields
 - consistent error envelope (`type`, `code`, `message`, `details`)
-- interface-driven service boundaries for testability and pluggability
-- non-business framework code under `internal/framework`
-
-### Structure
-
-```text
-.
-├── app.go
-├── main.go
-├── internal/
-│   ├── config/
-│   ├── framework/
-│   │   ├── backoff/
-│   │   ├── context/
-│   │   ├── http_connector/
-│   │   ├── logger/
-│   │   ├── runner/
-│   │   └── server/
-│   └── service/
-│       ├── exposure/
-│       ├── rates/
-│       └── transactions/
-├── data/
-├── docs/
-└── .github/workflows/
-```
-
-### System Design and User Flow
+- interface-driven boundaries for testability
+- non-business framework modules under `internal/framework`
+- historical-rate fallback for missing `authorization_rate` values
 
 ```mermaid
 flowchart LR
@@ -159,39 +141,12 @@ svc --> txSource[TransactionSource]
 svc --> response[ExposureSummaryAndRanking]
 ```
 
-## Quality and Reliability
-
-- Unit tests:
-  - exposure math and ranking
-  - validation and handler behavior
-  - FX retry and stale-cache fallback
-- CI: GitHub Actions workflow at [`.github/workflows/unit-tests.yml`](.github/workflows/unit-tests.yml) runs `go test ./...` on PRs and pushes.
-
 ## Deployment Artifacts
 
 - Dockerfile: [`Dockerfile`](Dockerfile)
 - Docker Compose: [`docker-compose.yml`](docker-compose.yml)
 - Make targets: [`Makefile`](Makefile)
 - Railway config: [`railway.toml`](railway.toml)
+- CI workflow: [`.github/workflows/unit-tests.yml`](.github/workflows/unit-tests.yml)
 
-Railway should deploy from `main` only after CI passes. The included workflow enforces test execution on PRs and pushes so merge-to-main can stay CI-gated.
-
-### Deployment URL Placeholders
-
-- Backend (Railway): `https://<railway-backend-url>`
-- Frontend (Vercel): `N/A (backend-only challenge)`
-
-## Trade-offs Made (2-hour Constraint)
-
-- Used auth-time rate from payload/seed data instead of full historical FX retrieval per timestamp.
-- Chose in-memory seed-backed transaction source over persistent DB.
-- Implemented one high-value endpoint instead of multiple query/report endpoints.
-- Kept risk model intentionally simple (`capture_now` when threshold crossed).
-
-## Future Upgrades
-
-- Persist transactions and exposure snapshots (PostgreSQL + Redis cache).
-- Add historical-rate provider fallback and richer currency pair analytics.
-- Add alerting/webhook stream for threshold breaches.
-- Add auth, scopes, and stronger idempotency persistence.
-- Add time-series exposure endpoint and hedging cost simulation.
+Deployments to `main` are intended to be CI-gated (`go test ./...`) before Railway release.

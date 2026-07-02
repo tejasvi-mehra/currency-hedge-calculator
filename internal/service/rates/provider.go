@@ -27,3 +27,8 @@ type Quote struct {
 type Provider interface {
 	GetPresentmentPerSettlementRate(ctx context.Context, settlementCurrency string, presentmentCurrency string) (Quote, error)
 }
+
+// HistoricalProvider resolves historical exchange rates for authorization-time calculations.
+type HistoricalProvider interface {
+	GetHistoricalPresentmentPerSettlementRate(ctx context.Context, settlementCurrency string, presentmentCurrency string, at time.Time) (Quote, error)
+}
