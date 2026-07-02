@@ -25,7 +25,8 @@ Currency Hedge Calculator is a backend service that computes real-time FX exposu
 ## API
 
 - `GET /healthz`
-- `POST /v1/exposure/calculate`
+- `POST /v1/exposure/calculate` (production endpoint)
+- `POST /v1/exposure/calculate/test` (test endpoint; loads analytics test data at call time)
 
 OpenAPI contract: [`docs/openapi.yaml`](docs/openapi.yaml)
 
@@ -68,7 +69,7 @@ docker compose up --build
 This repository includes API-callable test data for analytics and real-world style validation.
 
 - Transaction dataset: [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
-- Run local analytics call:
+- Test endpoint call:
 
 ```bash
 make analytics-local
@@ -92,13 +93,24 @@ curl --request POST \
   --data @docs/example-request.json
 ```
 
-### Default test-data fallback
+### Empty payload behavior (production endpoint)
 
 ```bash
 curl --request POST \
   --url http://localhost:8080/v1/exposure/calculate \
   --header 'Content-Type: application/json' \
   --data '{}'
+```
+
+Returns `400` with `NO_TRANSACTIONS`.
+
+### Test endpoint (loads analytics dataset on call)
+
+```bash
+curl --request POST \
+  --url http://localhost:8080/v1/exposure/calculate/test \
+  --header 'Content-Type: application/json' \
+  --data '{"risk_threshold_percentage":2}'
 ```
 
 ## Architecture

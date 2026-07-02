@@ -7,10 +7,10 @@ run-env:
 	@set -a; [ -f .env ] && . ./.env; set +a; go run .
 
 analytics-local:
-	@python3 -c "import json,sys; print(json.dumps({'risk_threshold_percentage': 2, 'transactions': json.load(open('data/analytics_test_transactions.json'))}))" | curl --request POST \
-		--url $${API_URL:-http://localhost:8080}/v1/exposure/calculate \
+	@curl --request POST \
+		--url $${API_URL:-http://localhost:8080}/v1/exposure/calculate/test \
 		--header 'Content-Type: application/json' \
-		--data @-
+		--data '{"risk_threshold_percentage":2}'
 
 test:
 	go test ./...

@@ -25,6 +25,9 @@ paths:
     post:
       summary: Calculate per-transaction and aggregate FX exposure
       operationId: calculateExposure
+      description: |
+        Primary production endpoint. Expects explicit transactions in the request body.
+        Empty payloads return `NO_TRANSACTIONS`.
       parameters:
         - in: header
           name: X-Idempotency-Key
@@ -34,11 +37,11 @@ paths:
             format: uuid
           description: Optional idempotency key for safe retries.
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CalculateExposureRequest"
+              $ref: "#/components/schemas/CalculateExposureInputRequest"
             examples:
               standard:
                 value:
@@ -53,6 +56,44 @@ paths:
       responses:
         "200":
           description: Exposure successfully calculated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalculateExposureResponse"
+        "400":
+          description: Invalid request payload, empty transaction list, or unsupported input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Live rate unavailable from upstream API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/exposure/calculate/test:
+    post:
+      summary: "[TEST] Calculate exposure using configured analytics test dataset"
+      operationId: calculateExposureTest
+      description: |
+        Test endpoint for analytics and QA workflows.
+        It always loads transactions from the configured test-data file at call time.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculateExposureTestRequest"
+      responses:
+        "200":
+          description: Exposure successfully calculated from default test data
           content:
             application/json:
               schema:
@@ -77,7 +118,21 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
-    CalculateExposureRequest:
+    CalculateExposureInputRequest:
+      type: object
+      required:
+        - transactions
+      properties:
+        risk_threshold_percentage:
+          type: number
+          format: double
+          minimum: 0
+          default: 2
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingTransaction"
+    CalculateExposureTestRequest:
       type: object
       properties:
         risk_threshold_percentage:
@@ -85,16 +140,6 @@ components:
           format: double
           minimum: 0
           default: 2
-        use_default_test_data_when_empty_input:
-          type: boolean
-          default: false
-          description: |
-            If true and transactions are omitted, the service loads pending transactions
-            from the configured default test data file.
-        transactions:
-          type: array
-          items:
-            $ref: "#/components/schemas/PendingTransaction"
     PendingTransaction:
       type: object
       required:
