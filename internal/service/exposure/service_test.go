@@ -50,7 +50,7 @@ func TestServiceCalculateExposure_MixedResults(t *testing.T) {
 		},
 	}
 
-	service := NewService(provider, nil, 2, nil)
+	service := NewService(provider, nil, 2, []string{"EUR", "BRL", "USD", "MXN", "ARS"}, 500, 10*time.Minute, 0, 0, nil, nil)
 	response, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
 		Transactions: []PendingTransaction{
 			{
@@ -112,6 +112,12 @@ func TestServiceCalculateExposure_UsesDefaultTestDataWhenRequested(t *testing.T)
 			},
 		},
 		2,
+		[]string{"USD", "ARS"},
+		500,
+		10*time.Minute,
+		0,
+		0,
+		nil,
 		nil,
 	)
 
@@ -130,7 +136,7 @@ func TestServiceCalculateExposure_UsesDefaultTestDataWhenRequested(t *testing.T)
 }
 
 func TestServiceCalculateExposure_ValidationError(t *testing.T) {
-	service := NewService(&ratesOnlyProviderStub{}, nil, 2, nil)
+	service := NewService(&ratesOnlyProviderStub{}, nil, 2, []string{"EUR", "BRL"}, 500, 10*time.Minute, 0, 0, nil, nil)
 
 	_, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
 		Transactions: []PendingTransaction{
@@ -168,7 +174,7 @@ func TestServiceCalculateExposure_ResolvesHistoricalAuthRateWhenMissing(t *testi
 		},
 	}
 
-	service := NewService(provider, nil, 2, nil)
+	service := NewService(provider, nil, 2, []string{"EUR", "BRL"}, 500, 10*time.Minute, 0, 0, nil, nil)
 	response, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
 		Transactions: []PendingTransaction{
 			{
@@ -189,5 +195,50 @@ func TestServiceCalculateExposure_ResolvesHistoricalAuthRateWhenMissing(t *testi
 	}
 	if got := response.Transactions[0].AuthorizationRateSource; got != "test-historical" {
 		t.Fatalf("expected historical auth source, got %q", got)
+	}
+}
+
+func TestServiceCalculateExposure_CaptureReadinessDecision(t *testing.T) {
+	provider := &stubRatesProvider{
+		quotes: map[string]rates.Quote{
+			"USD:USD": {SettlementCurrency: "USD", PresentmentCurrency: "USD", Rate: 1, Timestamp: time.Now().UTC(), Source: "identity"},
+		},
+	}
+	service := NewService(provider, nil, 2, []string{"USD"}, 500, 10*time.Minute, 0, 0, nil, nil)
+
+	response, err := service.CalculateExposure(context.Background(), CalculateExposureRequest{
+		Transactions: []PendingTransaction{
+			{
+				AccountID:              "acc_1",
+				PaymentID:              "pay_1",
+				TransactionID:          "tx_1",
+				MerchantOrderID:        "mo_1",
+				Country:                "US",
+				Provider:               "provider_a",
+				PaymentMethodType:      "card",
+				PaymentStatus:          "authorized",
+				TransactionStatus:      "authorized",
+				AuthorizedAt:           time.Now().Add(-48 * time.Hour).UTC(),
+				AuthorizationExpiresAt: time.Now().Add(-1 * time.Hour).UTC(),
+				AuthorizedAmount:       100,
+				CaptureAmount:          100,
+				PresentmentCurrency:    "USD",
+				SettlementCurrency:     "USD",
+				AuthorizationRate:      1,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CalculateExposure() unexpected error: %v", err)
+	}
+	got := response.Transactions[0]
+	if got.EligibleToCapture {
+		t.Fatalf("expected transaction not eligible to capture")
+	}
+	if got.AuthorizationExpiryRisk != "expired" {
+		t.Fatalf("expected expired risk, got %s", got.AuthorizationExpiryRisk)
+	}
+	if got.BlockingReason == "" {
+		t.Fatalf("expected blocking reason for non-capturable transaction")
 	}
 }

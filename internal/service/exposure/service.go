@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/framework/metrics"
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/service/rates"
 	"go.uber.org/zap"
 )
@@ -39,8 +40,14 @@ type Service struct {
 	ratesProvider        rates.Provider
 	transactionSource    TransactionSource
 	defaultRiskThreshold float64
+	supportedCurrencySet map[string]struct{}
+	maxTransactions      int
+	quoteFreshnessSLA    time.Duration
+	settlementSpreadBPS  float64
+	providerMarkupBPS    float64
 	clock                Clock
 	logger               *zap.SugaredLogger
+	metrics              *metrics.Collector
 }
 
 type historicalRateProvider interface {
@@ -61,6 +68,12 @@ func NewService(
 	ratesProvider rates.Provider,
 	transactionSource TransactionSource,
 	defaultRiskThreshold float64,
+	supportedCurrencies []string,
+	maxTransactions int,
+	quoteFreshnessSLA time.Duration,
+	settlementSpreadBPS float64,
+	providerMarkupBPS float64,
+	collector *metrics.Collector,
 	logger *zap.SugaredLogger,
 ) *Service {
 	if logger == nil {
@@ -69,13 +82,33 @@ func NewService(
 	if defaultRiskThreshold < 0 {
 		defaultRiskThreshold = 0
 	}
+	if maxTransactions <= 0 {
+		maxTransactions = 500
+	}
+	if quoteFreshnessSLA <= 0 {
+		quoteFreshnessSLA = 10 * time.Minute
+	}
+
+	supportedCurrencySet := map[string]struct{}{}
+	for _, code := range supportedCurrencies {
+		normalized := strings.ToUpper(strings.TrimSpace(code))
+		if normalized != "" {
+			supportedCurrencySet[normalized] = struct{}{}
+		}
+	}
 
 	return &Service{
 		ratesProvider:        ratesProvider,
 		transactionSource:    transactionSource,
 		defaultRiskThreshold: defaultRiskThreshold,
+		supportedCurrencySet: supportedCurrencySet,
+		maxTransactions:      maxTransactions,
+		quoteFreshnessSLA:    quoteFreshnessSLA,
+		settlementSpreadBPS:  settlementSpreadBPS,
+		providerMarkupBPS:    providerMarkupBPS,
 		clock:                systemClock{},
 		logger:               logger,
+		metrics:              collector,
 	}
 }
 
@@ -95,6 +128,9 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 	if len(transactions) == 0 {
 		return CalculateExposureResponse{}, ErrNoTransactions
 	}
+	if len(transactions) > s.maxTransactions {
+		return CalculateExposureResponse{}, fmt.Errorf("%w: max %d transactions per request", ErrValidation, s.maxTransactions)
+	}
 
 	threshold := s.defaultRiskThreshold
 	if request.RiskThresholdPercentage != nil {
@@ -113,11 +149,19 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 	var lossCount int
 	var neutralCount int
 	var highRiskCount int
+	var highRiskExposureTotal float64
 	var staleRateCount int
+	now := s.clock.Now()
 
 	for _, transaction := range transactions {
-		if err := validateTransaction(transaction); err != nil {
+		if err := validateTransaction(transaction, s.supportedCurrencySet); err != nil {
 			return CalculateExposureResponse{}, err
+		}
+		authorizedAt := resolveAuthorizedAt(transaction)
+		authorizationExpiresAt := resolveAuthorizationExpiresAt(transaction, authorizedAt)
+		captureAmount := transaction.CaptureAmount
+		if captureAmount <= 0 {
+			captureAmount = transaction.AuthorizedAmount
 		}
 
 		authorizationRate := transaction.AuthorizationRate
@@ -131,7 +175,7 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 				ctx,
 				transaction.SettlementCurrency,
 				transaction.PresentmentCurrency,
-				transaction.AuthorizationTimestamp,
+				authorizedAt,
 			)
 			if err != nil {
 				return CalculateExposureResponse{}, fmt.Errorf("resolve authorization rate for transaction %s: %w", transaction.TransactionID, err)
@@ -150,8 +194,9 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			return CalculateExposureResponse{}, fmt.Errorf("fetch current rate for transaction %s: %w", transaction.TransactionID, err)
 		}
 
-		originalSettlement := transaction.AuthorizedAmount / authorizationRate
-		currentSettlement := transaction.AuthorizedAmount / quote.Rate
+		effectiveCurrentRate := s.applyCurrentRateAssumptions(quote.Rate)
+		originalSettlement := captureAmount / authorizationRate
+		currentSettlement := captureAmount / effectiveCurrentRate
 		exposureAmount := currentSettlement - originalSettlement
 
 		exposurePercentage := 0.0
@@ -164,6 +209,9 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 		if isHighRisk {
 			recommendation = "capture_now"
 			highRiskCount++
+			if exposureAmount < 0 {
+				highRiskExposureTotal += (-1 * exposureAmount)
+			}
 		}
 
 		if exposureAmount > 0 {
@@ -173,7 +221,12 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 		} else {
 			neutralCount++
 		}
-		if quote.Stale {
+		quoteAgeSeconds := now.Sub(quote.Timestamp).Seconds()
+		if quoteAgeSeconds < 0 {
+			quoteAgeSeconds = 0
+		}
+		isStaleQuote := quote.Stale || time.Duration(quoteAgeSeconds*float64(time.Second)) > s.quoteFreshnessSLA
+		if isStaleQuote {
 			staleRateCount++
 		}
 
@@ -210,23 +263,52 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			pairGroup.HighRiskCount++
 		}
 
+		expiryRisk, expiryScore := calculateExpiryRisk(now, authorizationExpiresAt)
+		fxSeverityScore := calculateFXSeverityScore(exposurePercentage)
+		urgencyScore := calculateUrgencyScore(fxSeverityScore, expiryScore, exposureAmount)
+		nextAction := recommendNextAction(isHighRisk, urgencyScore, expiryRisk)
+		eligibleToCapture, blockingReason := captureEligibility(transaction, authorizationExpiresAt, now)
+		captureType := "full"
+		if captureAmount < transaction.AuthorizedAmount {
+			captureType = "partial"
+		}
+		partialSupported := supportsPartialCapture(transaction.PaymentMethodType)
+		captureEndpointHint := captureHint(transaction)
+
 		exposureItem := TransactionExposure{
+			AccountID:                transaction.AccountID,
+			PaymentID:                transaction.PaymentID,
+			MerchantOrderID:          transaction.MerchantOrderID,
 			TransactionID:            transaction.TransactionID,
-			AuthorizationTimestamp:   transaction.AuthorizationTimestamp,
+			AuthorizationTimestamp:   authorizedAt,
+			AuthorizationExpiresAt:   authorizationExpiresAt,
 			PresentmentCurrency:      currency,
 			SettlementCurrency:       strings.ToUpper(strings.TrimSpace(transaction.SettlementCurrency)),
 			AuthorizedAmount:         transaction.AuthorizedAmount,
+			CaptureAmount:            captureAmount,
 			OriginalSettlementAmount: round(originalSettlement),
 			CurrentSettlementAmount:  round(currentSettlement),
 			ExposureAmount:           round(exposureAmount),
 			ExposurePercentage:       round(exposurePercentage),
 			AuthorizationRate:        authorizationRate,
 			AuthorizationRateSource:  authorizationRateSource,
-			CurrentRate:              quote.Rate,
+			CurrentRate:              round(effectiveCurrentRate),
 			CurrentRateTimestamp:     quote.Timestamp,
+			QuoteAgeSeconds:          round(quoteAgeSeconds),
 			CurrentRateSource:        quote.Source,
-			IsStaleRate:              quote.Stale,
+			IsStaleRate:              isStaleQuote,
 			IsHighRisk:               isHighRisk,
+			EligibleToCapture:        eligibleToCapture,
+			CaptureEndpointHint:      captureEndpointHint,
+			CaptureType:              captureType,
+			PartialCaptureSupported:  partialSupported,
+			AuthorizationExpiryRisk:  expiryRisk,
+			BlockingReason:           blockingReason,
+			ExpectedLossAvoided:      round(math.Max(0, -1*exposureAmount)),
+			UrgencyScore:             round(urgencyScore),
+			ExpiryScore:              round(expiryScore),
+			FXSeverityScore:          round(fxSeverityScore),
+			NextAction:               nextAction,
 			Recommendation:           recommendation,
 			Metadata:                 transaction.Metadata,
 		}
@@ -297,12 +379,16 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 			LossCount:                 lossCount,
 			NeutralCount:              neutralCount,
 			HighRiskCount:             highRiskCount,
+			HighRiskExposureTotal:     round(highRiskExposureTotal),
 			StaleRateTransactionCount: staleRateCount,
 			CurrencyBreakdown:         currencyBreakdown,
 			RiskyCurrencyPairs:        riskyPairs,
 		},
 		Transactions: sortedExposures,
 		Ranking:      ranking,
+	}
+	if s.metrics != nil {
+		s.metrics.AddHighRiskExposure(round(highRiskExposureTotal))
 	}
 
 	if len(sortedExposures) > 0 {
@@ -315,16 +401,22 @@ func (s *Service) CalculateExposure(ctx context.Context, request CalculateExposu
 	return response, nil
 }
 
-func validateTransaction(transaction PendingTransaction) error {
+func validateTransaction(transaction PendingTransaction, supportedSet map[string]struct{}) error {
 	transactionID := strings.TrimSpace(transaction.TransactionID)
 	if transactionID == "" {
 		return fmt.Errorf("%w: transaction_id is required", ErrValidation)
 	}
-	if transaction.AuthorizationTimestamp.IsZero() {
-		return fmt.Errorf("%w: authorization_timestamp is required for transaction %s", ErrValidation, transactionID)
+	if resolveAuthorizedAt(transaction).IsZero() {
+		return fmt.Errorf("%w: authorized_at is required for transaction %s", ErrValidation, transactionID)
 	}
 	if transaction.AuthorizedAmount <= 0 {
 		return fmt.Errorf("%w: authorized_amount must be > 0 for transaction %s", ErrValidation, transactionID)
+	}
+	if transaction.CaptureAmount < 0 {
+		return fmt.Errorf("%w: capture_amount must be >= 0 for transaction %s", ErrValidation, transactionID)
+	}
+	if transaction.CaptureAmount > transaction.AuthorizedAmount {
+		return fmt.Errorf("%w: capture_amount cannot exceed authorized_amount for transaction %s", ErrValidation, transactionID)
 	}
 	if strings.TrimSpace(transaction.PresentmentCurrency) == "" {
 		return fmt.Errorf("%w: presentment_currency is required for transaction %s", ErrValidation, transactionID)
@@ -332,7 +424,124 @@ func validateTransaction(transaction PendingTransaction) error {
 	if strings.TrimSpace(transaction.SettlementCurrency) == "" {
 		return fmt.Errorf("%w: settlement_currency is required for transaction %s", ErrValidation, transactionID)
 	}
+	if len(supportedSet) > 0 {
+		if _, ok := supportedSet[strings.ToUpper(strings.TrimSpace(transaction.PresentmentCurrency))]; !ok {
+			return fmt.Errorf("%w: unsupported presentment currency for transaction %s", ErrValidation, transactionID)
+		}
+		if _, ok := supportedSet[strings.ToUpper(strings.TrimSpace(transaction.SettlementCurrency))]; !ok {
+			return fmt.Errorf("%w: unsupported settlement currency for transaction %s", ErrValidation, transactionID)
+		}
+	}
 	return nil
+}
+
+func resolveAuthorizedAt(transaction PendingTransaction) time.Time {
+	if !transaction.AuthorizedAt.IsZero() {
+		return transaction.AuthorizedAt.UTC()
+	}
+	return transaction.AuthorizationTimestamp.UTC()
+}
+
+func resolveAuthorizationExpiresAt(transaction PendingTransaction, authorizedAt time.Time) time.Time {
+	if !transaction.AuthorizationExpiresAt.IsZero() {
+		return transaction.AuthorizationExpiresAt.UTC()
+	}
+	if authorizedAt.IsZero() {
+		return time.Time{}
+	}
+	return authorizedAt.Add(7 * 24 * time.Hour).UTC()
+}
+
+func calculateExpiryRisk(now time.Time, expiresAt time.Time) (string, float64) {
+	if expiresAt.IsZero() {
+		return "unknown", 35
+	}
+	remaining := expiresAt.Sub(now)
+	switch {
+	case remaining <= 0:
+		return "expired", 100
+	case remaining <= 24*time.Hour:
+		return "high", 90
+	case remaining <= 72*time.Hour:
+		return "medium", 65
+	default:
+		return "low", 30
+	}
+}
+
+func calculateFXSeverityScore(exposurePct float64) float64 {
+	if exposurePct >= 0 {
+		return 5
+	}
+	score := math.Min(100, math.Abs(exposurePct)*8)
+	if score < 5 {
+		score = 5
+	}
+	return score
+}
+
+func calculateUrgencyScore(fxSeverityScore float64, expiryScore float64, exposureAmount float64) float64 {
+	weightFX := 0.65
+	if exposureAmount >= 0 {
+		weightFX = 0.35
+	}
+	return (fxSeverityScore * weightFX) + (expiryScore * (1 - weightFX))
+}
+
+func recommendNextAction(isHighRisk bool, urgencyScore float64, expiryRisk string) string {
+	if expiryRisk == "expired" {
+		return "authorization_expired_reauthorize_required"
+	}
+	if isHighRisk && urgencyScore >= 75 {
+		return "capture_immediately"
+	}
+	if isHighRisk {
+		return "prioritize_capture_today"
+	}
+	if urgencyScore >= 70 {
+		return "schedule_capture_soon"
+	}
+	return "monitor_and_capture_per_schedule"
+}
+
+func captureEligibility(transaction PendingTransaction, expiresAt time.Time, now time.Time) (bool, string) {
+	if !expiresAt.IsZero() && !expiresAt.After(now) {
+		return false, "authorization_expired"
+	}
+	paymentStatus := strings.ToLower(strings.TrimSpace(transaction.PaymentStatus))
+	switch paymentStatus {
+	case "captured", "cancelled", "refunded", "failed":
+		return false, "payment_status_not_capturable"
+	}
+	transactionStatus := strings.ToLower(strings.TrimSpace(transaction.TransactionStatus))
+	if transactionStatus != "" && transactionStatus != "authorized" && transactionStatus != "pending" {
+		return false, "transaction_status_not_capturable"
+	}
+	return true, ""
+}
+
+func captureHint(transaction PendingTransaction) string {
+	if strings.TrimSpace(transaction.PaymentID) != "" {
+		return "/v1/payments/" + strings.TrimSpace(transaction.PaymentID) + "/capture"
+	}
+	return "/v1/payments/{payment_id}/capture"
+}
+
+func supportsPartialCapture(paymentMethodType string) bool {
+	switch strings.ToLower(strings.TrimSpace(paymentMethodType)) {
+	case "card", "credit_card":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) applyCurrentRateAssumptions(rawRate float64) float64 {
+	bps := s.settlementSpreadBPS + s.providerMarkupBPS
+	if bps <= 0 {
+		return rawRate
+	}
+	return rawRate * (1 + (bps / 10000))
 }
 
 func round(value float64) float64 {

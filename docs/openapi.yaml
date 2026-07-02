@@ -30,12 +30,18 @@ paths:
         Empty payloads return `NO_TRANSACTIONS`.
       parameters:
         - in: header
+          name: X-API-Key
+          required: true
+          schema:
+            type: string
+          description: API authentication key.
+        - in: header
           name: X-Idempotency-Key
-          required: false
+          required: true
           schema:
             type: string
             format: uuid
-          description: Optional idempotency key for safe retries.
+          description: Idempotency key used for 24-hour replay semantics on POST requests.
       requestBody:
         required: true
         content:
@@ -80,11 +86,25 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /v1/exposure/calculate/test:
     post:
-      summary: "[TEST] Calculate exposure using configured analytics test dataset"
+      summary: "[DEMO-ONLY] Calculate exposure using configured analytics test dataset"
       operationId: calculateExposureTest
       description: |
-        Test endpoint for analytics and QA workflows.
+        Demo-only endpoint for analytics and QA workflows.
         It always loads transactions from the configured test-data file at call time.
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          schema:
+            type: string
+          description: API authentication key.
+        - in: header
+          name: X-Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Idempotency key used for 24-hour replay semantics on POST requests.
       requestBody:
         required: false
         content:
@@ -143,18 +163,54 @@ components:
     PendingTransaction:
       type: object
       required:
+        - account_id
+        - payment_id
         - transaction_id
-        - authorization_timestamp
+        - merchant_order_id
+        - country
+        - provider
+        - payment_method_type
+        - payment_status
+        - transaction_status
+        - authorized_at
+        - authorization_expires_at
         - authorized_amount
+        - capture_amount
         - presentment_currency
         - settlement_currency
       properties:
+        account_id:
+          type: string
+        payment_id:
+          type: string
         transaction_id:
+          type: string
+        merchant_order_id:
+          type: string
+        country:
+          type: string
+        provider:
+          type: string
+        payment_method_type:
+          type: string
+        payment_status:
+          type: string
+        transaction_status:
           type: string
         authorization_timestamp:
           type: string
           format: date-time
+        authorized_at:
+          type: string
+          format: date-time
+        authorization_expires_at:
+          type: string
+          format: date-time
         authorized_amount:
+          type: number
+          format: double
+          minimum: 0
+        capture_amount:
           type: number
           format: double
           minimum: 0
@@ -210,6 +266,9 @@ components:
           type: integer
         high_risk_count:
           type: integer
+        high_risk_exposure_total:
+          type: number
+          format: double
         stale_rate_transaction_count:
           type: integer
         currency_breakdown:
@@ -261,9 +320,18 @@ components:
     TransactionExposure:
       type: object
       properties:
+        account_id:
+          type: string
+        payment_id:
+          type: string
+        merchant_order_id:
+          type: string
         transaction_id:
           type: string
         authorization_timestamp:
+          type: string
+          format: date-time
+        authorization_expires_at:
           type: string
           format: date-time
         presentment_currency:
@@ -271,6 +339,9 @@ components:
         settlement_currency:
           type: string
         authorized_amount:
+          type: number
+          format: double
+        capture_amount:
           type: number
           format: double
         original_settlement_amount:
@@ -296,15 +367,45 @@ components:
         current_rate_timestamp:
           type: string
           format: date-time
+        quote_age_seconds:
+          type: number
+          format: double
         current_rate_source:
           type: string
         is_stale_rate:
           type: boolean
         is_high_risk:
           type: boolean
+        eligible_to_capture:
+          type: boolean
+        capture_endpoint_hint:
+          type: string
+        capture_type:
+          type: string
+          enum: [full, partial]
+        partial_capture_supported:
+          type: boolean
+        authorization_expiry_risk:
+          type: string
+          enum: [expired, high, medium, low, unknown]
+        blocking_reason:
+          type: string
+        expected_loss_avoided:
+          type: number
+          format: double
+        urgency_score:
+          type: number
+          format: double
+        expiry_score:
+          type: number
+          format: double
+        fx_severity_score:
+          type: number
+          format: double
+        next_action:
+          type: string
         recommendation:
           type: string
-          enum: [capture_now, monitor]
         metadata:
           type: object
           additionalProperties:

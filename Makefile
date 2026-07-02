@@ -10,6 +10,8 @@ analytics-local:
 	@curl --request POST \
 		--url $${API_URL:-http://localhost:8080}/v1/exposure/calculate/test \
 		--header 'Content-Type: application/json' \
+		--header 'X-API-Key: '$${API_AUTH_KEY:-dev-api-key} \
+		--header 'X-Idempotency-Key: 11111111-1111-4111-8111-111111111111' \
 		--data '{"risk_threshold_percentage":2}'
 
 test:

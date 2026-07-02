@@ -2,7 +2,6 @@ package exposure
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -123,9 +122,7 @@ func (h *Handler) writeServiceError(ctx server.Context, err error) error {
 		payload.Message = err.Error()
 	default:
 		statusCode = http.StatusInternalServerError
-		payload.Details = map[string]any{
-			"error": fmt.Sprintf("%v", err),
-		}
+		payload.Message = "internal processing error"
 	}
 
 	if statusCode >= http.StatusInternalServerError {
