@@ -25,14 +25,15 @@ Currency Hedge Calculator is a backend service that computes real-time FX exposu
 ## Core Requirements Coverage
 
 - This repo achieves **accurate exposure calculation** by computing original settlement value from authorization-time rates, current settlement value from live rates, per-transaction deltas, and full aggregate rollups (totals, gain/loss counts, currency breakdown, best/worst).
-- This repo achieves **live FX integration with resilience** by querying external rate providers, retrying transient failures, handling unsupported pairs explicitly, and falling back to cached quotes when live calls fail.
-- This repo achieves **actionable risk ranking** by sorting transactions by loss severity, flagging threshold breaches as `capture_now`, and exposing `risky_currency_pairs` trend insights to highlight dangerous pair-level movement.
+- This repo achieves **live FX integration with resilience** by querying external rate providers, retrying transient failures, applying quote freshness checks, handling unsupported pairs explicitly, resolving missing auth-time rates historically, and falling back to secondary/cached quotes when live calls fail.
+- This repo achieves **actionable risk ranking** by sorting transactions by loss severity, flagging threshold breaches, and computing urgency/expiry/FX severity scores with pair-level trend insights for next-action guidance.
 
 ## API
 
 - `GET /healthz`
 - `POST /v1/exposure/calculate` (production endpoint)
-- `POST /v1/exposure/calculate/test` (test endpoint; loads analytics test data at call time)
+- `POST /v1/exposure/calculate/test` (**demo-only endpoint**; loads analytics test data at call time)
+- `GET /metrics`
 
 OpenAPI contract: [`docs/openapi.yaml`](docs/openapi.yaml)
 
@@ -50,6 +51,7 @@ make run-env
 
 - App runs at `http://localhost:8080`.
 - `make run-env` exports values from `.env` into runtime env vars before `go run .`.
+- POST requests require `X-API-Key` and `X-Idempotency-Key` headers.
 
 ### Run Tests
 
@@ -72,10 +74,19 @@ docker compose up --build
 
 ## Analytics Test Data
 
-This repository includes API-callable test data for analytics and real-world style validation.
+This repository includes API-callable datasets for both seeded demo validation and live-like load simulation.
 
-- Transaction dataset: [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
-- Test endpoint call:
+- Seeded demo dataset (used by demo-only endpoint): [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
+- Postman live simulation payloads:
+  - [`docs/postman/data/live_sample_50_request.json`](docs/postman/data/live_sample_50_request.json)
+  - [`docs/postman/data/live_sample_100_request.json`](docs/postman/data/live_sample_100_request.json)
+  - [`docs/postman/data/live_sample_1000_request.json`](docs/postman/data/live_sample_1000_request.json)
+- Data diversity coverage:
+  - timestamps spread across the prior month (up to 30 days old)
+  - mixed currencies/country/provider/payment-method/status combinations
+  - full + partial capture amounts to exercise capture-readiness paths
+
+### Demo seeded test call
 
 ```bash
 make analytics-local
@@ -87,6 +98,15 @@ Use a remote URL if needed:
 API_URL=https://currency-hedge-calculator-production.up.railway.app make analytics-local
 ```
 
+### Postman assets
+
+- Collection: [`docs/postman/currency-hedge-calculator.postman_collection.json`](docs/postman/currency-hedge-calculator.postman_collection.json)
+- Environment: [`docs/postman/currency-hedge-calculator.postman_environment.json`](docs/postman/currency-hedge-calculator.postman_environment.json)
+- Includes all APIs with:
+  - plain template requests for manual input
+  - seeded demo requests
+  - production live-simulation requests with 50/100/1000 transaction payloads
+
 ## API Usage
 
 ### Explicit request payload
@@ -95,6 +115,7 @@ API_URL=https://currency-hedge-calculator-production.up.railway.app make analyti
 curl --request POST \
   --url http://localhost:8080/v1/exposure/calculate \
   --header 'Content-Type: application/json' \
+  --header 'X-API-Key: dev-api-key' \
   --header 'X-Idempotency-Key: 7bf41af5-70ae-4e79-9b28-a8fa75c3ac53' \
   --data @docs/example-request.json
 ```
@@ -105,6 +126,8 @@ curl --request POST \
 curl --request POST \
   --url http://localhost:8080/v1/exposure/calculate \
   --header 'Content-Type: application/json' \
+  --header 'X-API-Key: dev-api-key' \
+  --header 'X-Idempotency-Key: 7bf41af5-70ae-4e79-9b28-a8fa75c3ac53' \
   --data '{}'
 ```
 
@@ -116,8 +139,25 @@ Returns `400` with `NO_TRANSACTIONS`.
 curl --request POST \
   --url http://localhost:8080/v1/exposure/calculate/test \
   --header 'Content-Type: application/json' \
+  --header 'X-API-Key: dev-api-key' \
+  --header 'X-Idempotency-Key: 7bf41af5-70ae-4e79-9b28-a8fa75c3ac53' \
   --data '{"risk_threshold_percentage":2}'
 ```
+
+## Idempotency
+
+- `X-Idempotency-Key` is required for every POST endpoint.
+- Key format must be UUID.
+- Same key + same payload returns cached response for 24 hours.
+- Same key + different payload returns `409 IDEMPOTENCY_DUPLICATED`.
+- Same key while initial request is still processing returns `409 REQUEST_IN_PROCESS`.
+
+## FX Assumptions
+
+- Current-rate settlement uses configurable assumptions: `FX_SETTLEMENT_SPREAD_BPS` + `FX_PROVIDER_MARKUP_BPS`.
+- Quote freshness SLA is controlled by `FX_QUOTE_FRESHNESS_SLA`; older quotes are flagged as stale.
+- Historical auth-rate lookup shifts weekend timestamps to the previous business day for realistic market data.
+- Provider fallback order is: primary live source -> fallback provider latest quote -> stale cache.
 
 ## Architecture
 
@@ -128,6 +168,7 @@ This project follows Yuno-style API and code-structure conventions:
 - interface-driven boundaries for testability
 - non-business framework modules under `internal/framework`
 - historical-rate fallback for missing `authorization_rate` values
+- API hardening via auth, rate limiting, body/transaction limits, timeout budgets, and idempotency handling
 
 ```mermaid
 flowchart LR
@@ -150,3 +191,15 @@ svc --> response[ExposureSummaryAndRanking]
 - CI workflow: [`.github/workflows/unit-tests.yml`](.github/workflows/unit-tests.yml)
 
 Deployments to `main` are intended to be CI-gated (`go test ./...`) before Railway release.
+
+## Trade-offs
+
+- Idempotency and rate-limiting state are in-memory, so behavior is per instance.
+- Metrics are lightweight JSON snapshots instead of full Prometheus instrumentation.
+- FX fallback chain is practical but intentionally simple for operational clarity.
+
+## What I'd Improve
+
+- Move idempotency/rate-limit state to Redis for multi-instance consistency.
+- Expose Prometheus metrics + dashboards for p95 latency and high-risk exposure totals.
+- Add provider-native capture-capability matrix for richer capture-readiness decisions.

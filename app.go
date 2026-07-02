@@ -8,6 +8,7 @@ import (
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/config"
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/framework/backoff"
 	frameworkhttp "github.com/tejasvi-mehra/currency-hedge-calculator/internal/framework/http_connector"
+	frameworkmetrics "github.com/tejasvi-mehra/currency-hedge-calculator/internal/framework/metrics"
 	frameworkserver "github.com/tejasvi-mehra/currency-hedge-calculator/internal/framework/server"
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/service/exposure"
 	"github.com/tejasvi-mehra/currency-hedge-calculator/internal/service/rates"
@@ -27,6 +28,8 @@ func NewApp(cfg config.Config, logger *zap.SugaredLogger) (*App, error) {
 		logger = zap.NewNop().Sugar()
 	}
 
+	collector := frameworkmetrics.NewCollector()
+
 	httpConnector := frameworkhttp.New(cfg.FX.Timeout, logger.Named("framework.http_connector"))
 	rateCache := rates.NewMemoryCache(cfg.FX.CacheTTL)
 	retryStrategy := backoff.Exponential{
@@ -38,6 +41,7 @@ func NewApp(cfg config.Config, logger *zap.SugaredLogger) (*App, error) {
 		httpConnector,
 		rateCache,
 		retryStrategy,
+		collector,
 		logger.Named("service.rates"),
 	)
 
@@ -50,14 +54,29 @@ func NewApp(cfg config.Config, logger *zap.SugaredLogger) (*App, error) {
 		ratesProvider,
 		store,
 		cfg.Exposure.DefaultRiskThresholdPercentage,
+		cfg.FX.SupportedCurrencies,
+		cfg.Server.MaxTransactions,
+		cfg.FX.QuoteFreshnessSLA,
+		cfg.FX.SettlementSpreadBPS,
+		cfg.FX.ProviderMarkupBPS,
+		collector,
 		logger.Named("service.exposure"),
 	)
 	exposureHandler := exposure.NewHandler(exposureService, logger.Named("handler.exposure"))
 
 	server := frameworkserver.New(cfg.Server.ListenAddr, logger.Named("framework.server"))
+	server.UseObservability(collector)
+	server.UseBodyLimit(cfg.Server.MaxBodyBytes)
+	server.UseRequestTimeout(cfg.Server.RequestTimeout)
 	server.UseCORS(cfg.Server.AllowedOrigins)
+	server.UseAPIKeyAuth(cfg.Security.APIKey)
+	server.UseRateLimiting(cfg.Server.RateLimitMax, cfg.Server.RateLimitWindow)
+	server.UseIdempotency(cfg.Server.IdempotencyTTL, collector)
 	server.UseRequestLogging()
 	exposureHandler.Register(server, cfg.Server.HealthPath)
+	server.GET("/metrics", func(ctx frameworkserver.Context) error {
+		return ctx.JSON(200, collector.Snapshot())
+	})
 
 	return &App{
 		server: server,

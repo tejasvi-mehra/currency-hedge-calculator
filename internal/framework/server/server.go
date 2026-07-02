@@ -157,3 +157,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	defer cancel()
 	return s.server.Shutdown(timeoutCtx)
 }
+
+// HTTPHandler exposes the underlying HTTP handler for integration tests.
+func (s *Server) HTTPHandler() http.Handler {
+	return s.echo
+}

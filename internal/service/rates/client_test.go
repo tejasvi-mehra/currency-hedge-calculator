@@ -48,6 +48,7 @@ func TestLiveProvider_RetryThenSuccess(t *testing.T) {
 		NewMemoryCache(time.Minute),
 		backoff.Exponential{Initial: time.Millisecond, Max: time.Millisecond * 2},
 		nil,
+		nil,
 	)
 
 	quote, err := provider.GetPresentmentPerSettlementRate(context.Background(), "EUR", "BRL")
@@ -92,6 +93,7 @@ func TestLiveProvider_StaleCacheFallback(t *testing.T) {
 		cache,
 		backoff.Exponential{Initial: time.Millisecond, Max: time.Millisecond},
 		nil,
+		nil,
 	)
 
 	quote, err := provider.GetPresentmentPerSettlementRate(context.Background(), "USD", "MXN")
@@ -116,6 +118,7 @@ func TestLiveProvider_UnsupportedCurrency(t *testing.T) {
 		frameworkhttp.New(2*time.Second, nil),
 		NewMemoryCache(time.Minute),
 		backoff.Exponential{Initial: time.Millisecond, Max: time.Millisecond},
+		nil,
 		nil,
 	)
 
@@ -164,6 +167,7 @@ func TestLiveProvider_HistoricalRate(t *testing.T) {
 		frameworkhttp.New(2*time.Second, nil),
 		NewMemoryCache(time.Minute),
 		backoff.Exponential{Initial: time.Millisecond, Max: time.Millisecond * 2},
+		nil,
 		nil,
 	)
 
