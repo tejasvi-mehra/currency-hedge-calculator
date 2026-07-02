@@ -7,18 +7,6 @@
   },
   "variable": [
     {
-      "key": "base_url",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "base_url_local",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "base_url_prod",
-      "value": "https://currency-hedge-calculator-production.up.railway.app"
-    },
-    {
       "key": "api_key",
       "value": "dev-api-key"
     },
@@ -53,7 +41,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/healthz"
+              "raw": "http://localhost:8080/healthz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "healthz"
+              ],
+              "port": "8080"
             }
           }
         },
@@ -79,7 +75,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url_local}}/healthz"
+              "raw": "http://localhost:8080/healthz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "healthz"
+              ],
+              "port": "8080"
             }
           }
         },
@@ -105,7 +109,17 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url_prod}}/healthz"
+              "raw": "https://currency-hedge-calculator-production.up.railway.app/healthz",
+              "protocol": "https",
+              "host": [
+                "currency-hedge-calculator-production",
+                "up",
+                "railway",
+                "app"
+              ],
+              "path": [
+                "healthz"
+              ]
             }
           }
         }
@@ -143,7 +157,15 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/metrics"
+              "raw": "http://localhost:8080/metrics",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "metrics"
+              ],
+              "port": "8080"
             }
           }
         },
@@ -176,7 +198,15 @@
               }
             ],
             "url": {
-              "raw": "{{base_url_local}}/metrics"
+              "raw": "http://localhost:8080/metrics",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "metrics"
+              ],
+              "port": "8080"
             }
           }
         },
@@ -209,7 +239,17 @@
               }
             ],
             "url": {
-              "raw": "{{base_url_prod}}/metrics"
+              "raw": "https://currency-hedge-calculator-production.up.railway.app/metrics",
+              "protocol": "https",
+              "host": [
+                "currency-hedge-calculator-production",
+                "up",
+                "railway",
+                "app"
+              ],
+              "path": [
+                "metrics"
+              ]
             }
           }
         }
@@ -265,7 +305,17 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/exposure/calculate"
+              "raw": "http://localhost:8080/v1/exposure/calculate",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate"
+              ],
+              "port": "8080"
             },
             "body": {
               "mode": "raw",
@@ -329,7 +379,18 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/exposure/calculate/test"
+              "raw": "http://localhost:8080/v1/exposure/calculate/test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate",
+                "test"
+              ],
+              "port": "8080"
             },
             "body": {
               "mode": "raw",
@@ -393,7 +454,19 @@
               }
             ],
             "url": {
-              "raw": "{{base_url_prod}}/v1/exposure/calculate"
+              "raw": "https://currency-hedge-calculator-production.up.railway.app/v1/exposure/calculate",
+              "protocol": "https",
+              "host": [
+                "currency-hedge-calculator-production",
+                "up",
+                "railway",
+                "app"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -457,7 +530,19 @@
               }
             ],
             "url": {
-              "raw": "{{base_url_prod}}/v1/exposure/calculate"
+              "raw": "https://currency-hedge-calculator-production.up.railway.app/v1/exposure/calculate",
+              "protocol": "https",
+              "host": [
+                "currency-hedge-calculator-production",
+                "up",
+                "railway",
+                "app"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -525,7 +610,19 @@
               }
             ],
             "url": {
-              "raw": "{{base_url_prod}}/v1/exposure/calculate"
+              "raw": "https://currency-hedge-calculator-production.up.railway.app/v1/exposure/calculate",
+              "protocol": "https",
+              "host": [
+                "currency-hedge-calculator-production",
+                "up",
+                "railway",
+                "app"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -595,7 +692,18 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/exposure/calculate/test"
+              "raw": "http://localhost:8080/v1/exposure/calculate/test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate",
+                "test"
+              ],
+              "port": "8080"
             },
             "body": {
               "mode": "raw",
@@ -659,7 +767,18 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/exposure/calculate/test"
+              "raw": "http://localhost:8080/v1/exposure/calculate/test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate",
+                "test"
+              ],
+              "port": "8080"
             },
             "body": {
               "mode": "raw",
@@ -723,7 +842,18 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/exposure/calculate/test"
+              "raw": "http://localhost:8080/v1/exposure/calculate/test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "path": [
+                "v1",
+                "exposure",
+                "calculate",
+                "test"
+              ],
+              "port": "8080"
             },
             "body": {
               "mode": "raw",
