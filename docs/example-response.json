@@ -1,0 +1,123 @@
+{
+  "summary": {
+    "generated_at": "2026-07-02T04:00:00Z",
+    "total_exposure_amount": -87.3016,
+    "gain_count": 1,
+    "loss_count": 1,
+    "neutral_count": 0,
+    "high_risk_count": 1,
+    "stale_rate_transaction_count": 0,
+    "currency_breakdown": [
+      {
+        "presentment_currency": "BRL",
+        "total_exposure_amount": -114.2857,
+        "transaction_count": 1,
+        "gain_count": 0,
+        "loss_count": 1
+      },
+      {
+        "presentment_currency": "MXN",
+        "total_exposure_amount": 26.9841,
+        "transaction_count": 1,
+        "gain_count": 1,
+        "loss_count": 0
+      }
+    ],
+    "best_transaction": {
+      "transaction_id": "TXN-DEMO-002",
+      "authorization_timestamp": "2026-06-25T14:00:00Z",
+      "presentment_currency": "MXN",
+      "settlement_currency": "USD",
+      "authorized_amount": 17000,
+      "original_settlement_amount": 944.4444,
+      "current_settlement_amount": 971.4286,
+      "exposure_amount": 26.9841,
+      "exposure_percentage": 2.8571,
+      "authorization_rate": 18,
+      "current_rate": 17.5,
+      "current_rate_timestamp": "2026-07-02T04:00:00Z",
+      "current_rate_source": "open-er-api",
+      "is_stale_rate": false,
+      "is_high_risk": false,
+      "recommendation": "monitor"
+    },
+    "worst_transaction": {
+      "transaction_id": "TXN-DEMO-001",
+      "authorization_timestamp": "2026-06-20T10:30:00Z",
+      "presentment_currency": "BRL",
+      "settlement_currency": "EUR",
+      "authorized_amount": 14400,
+      "original_settlement_amount": 2400,
+      "current_settlement_amount": 2285.7143,
+      "exposure_amount": -114.2857,
+      "exposure_percentage": -4.7619,
+      "authorization_rate": 6,
+      "current_rate": 6.3,
+      "current_rate_timestamp": "2026-07-02T04:00:00Z",
+      "current_rate_source": "open-er-api",
+      "is_stale_rate": false,
+      "is_high_risk": true,
+      "recommendation": "capture_now"
+    }
+  },
+  "transactions": [
+    {
+      "transaction_id": "TXN-DEMO-001",
+      "authorization_timestamp": "2026-06-20T10:30:00Z",
+      "presentment_currency": "BRL",
+      "settlement_currency": "EUR",
+      "authorized_amount": 14400,
+      "original_settlement_amount": 2400,
+      "current_settlement_amount": 2285.7143,
+      "exposure_amount": -114.2857,
+      "exposure_percentage": -4.7619,
+      "authorization_rate": 6,
+      "current_rate": 6.3,
+      "current_rate_timestamp": "2026-07-02T04:00:00Z",
+      "current_rate_source": "open-er-api",
+      "is_stale_rate": false,
+      "is_high_risk": true,
+      "recommendation": "capture_now"
+    },
+    {
+      "transaction_id": "TXN-DEMO-002",
+      "authorization_timestamp": "2026-06-25T14:00:00Z",
+      "presentment_currency": "MXN",
+      "settlement_currency": "USD",
+      "authorized_amount": 17000,
+      "original_settlement_amount": 944.4444,
+      "current_settlement_amount": 971.4286,
+      "exposure_amount": 26.9841,
+      "exposure_percentage": 2.8571,
+      "authorization_rate": 18,
+      "current_rate": 17.5,
+      "current_rate_timestamp": "2026-07-02T04:00:00Z",
+      "current_rate_source": "open-er-api",
+      "is_stale_rate": false,
+      "is_high_risk": false,
+      "recommendation": "monitor"
+    }
+  ],
+  "ranking": [
+    {
+      "rank": 1,
+      "transaction_id": "TXN-DEMO-001",
+      "presentment_currency": "BRL",
+      "settlement_currency": "EUR",
+      "exposure_amount": -114.2857,
+      "exposure_percentage": -4.7619,
+      "is_high_risk": true,
+      "recommendation": "capture_now"
+    },
+    {
+      "rank": 2,
+      "transaction_id": "TXN-DEMO-002",
+      "presentment_currency": "MXN",
+      "settlement_currency": "USD",
+      "exposure_amount": 26.9841,
+      "exposure_percentage": 2.8571,
+      "is_high_risk": false,
+      "recommendation": "monitor"
+    }
+  ]
+}
