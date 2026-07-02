@@ -32,7 +32,7 @@ Currency Hedge Calculator is a backend service that computes real-time FX exposu
 
 - `GET /healthz`
 - `POST /v1/exposure/calculate` (production endpoint)
-- `POST /v1/exposure/calculate/test` (**demo-only endpoint**; loads analytics test data at call time)
+- `POST /v1/exposure/calculate/test` (**demo-only endpoint**, intentionally exposed for now; loads analytics test data at call time)
 - `GET /metrics`
 
 OpenAPI contract: [`docs/openapi.yaml`](docs/openapi.yaml)
@@ -158,6 +158,7 @@ curl --request POST \
 - Quote freshness SLA is controlled by `FX_QUOTE_FRESHNESS_SLA`; older quotes are flagged as stale.
 - Historical auth-rate lookup shifts weekend timestamps to the previous business day for realistic market data.
 - Provider fallback order is: primary live source -> fallback provider latest quote -> stale cache.
+- Historical-rate resolution is best-effort only; when `authorization_rate` is provided in the request, that supplied value remains the source of truth.
 
 ## Architecture
 

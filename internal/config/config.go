@@ -51,8 +51,8 @@ type FXConfig struct {
 	RetryMax            time.Duration `env:"FX_RETRY_MAX" envDefault:"2s"`
 	CacheTTL            time.Duration `env:"FX_CACHE_TTL" envDefault:"5m"`
 	QuoteFreshnessSLA   time.Duration `env:"FX_QUOTE_FRESHNESS_SLA" envDefault:"10m"`
-	SettlementSpreadBPS float64       `env:"FX_SETTLEMENT_SPREAD_BPS" envDefault:"15"`
-	ProviderMarkupBPS   float64       `env:"FX_PROVIDER_MARKUP_BPS" envDefault:"10"`
+	SettlementSpreadBPS float64       `env:"FX_SETTLEMENT_SPREAD_BPS" envDefault:"0"`
+	ProviderMarkupBPS   float64       `env:"FX_PROVIDER_MARKUP_BPS" envDefault:"0"`
 	SupportedCurrencies []string      `env:"FX_SUPPORTED_CURRENCIES" envDefault:"USD,EUR,BRL,MXN,COP,ARS,CLP" envSeparator:","`
 }
 

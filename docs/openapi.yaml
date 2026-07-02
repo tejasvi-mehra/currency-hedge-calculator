@@ -8,6 +8,8 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development
+  - url: https://currency-hedge-calculator-production.up.railway.app
+    description: Railway production
 paths:
   /healthz:
     get:
@@ -90,6 +92,7 @@ paths:
       operationId: calculateExposureTest
       description: |
         Demo-only endpoint for analytics and QA workflows.
+        It is intentionally exposed for now to simplify external validation and benchmarking.
         It always loads transactions from the configured test-data file at call time.
       parameters:
         - in: header

@@ -87,6 +87,7 @@ func (s *Server) UseCORS(allowedOrigins []string) {
 			echo.HeaderContentType,
 			echo.HeaderAccept,
 			echo.HeaderAuthorization,
+			"X-API-Key",
 			"X-Idempotency-Key",
 		},
 	}))
