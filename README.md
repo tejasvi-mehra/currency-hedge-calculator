@@ -74,10 +74,19 @@ docker compose up --build
 
 ## Analytics Test Data
 
-This repository includes API-callable test data for analytics and real-world style validation.
+This repository includes API-callable datasets for both seeded demo validation and live-like load simulation.
 
-- Transaction dataset: [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
-- Test endpoint call:
+- Seeded demo dataset (used by demo-only endpoint): [`data/analytics_test_transactions.json`](data/analytics_test_transactions.json)
+- Postman live simulation payloads:
+  - [`docs/postman/data/live_sample_50_request.json`](docs/postman/data/live_sample_50_request.json)
+  - [`docs/postman/data/live_sample_100_request.json`](docs/postman/data/live_sample_100_request.json)
+  - [`docs/postman/data/live_sample_1000_request.json`](docs/postman/data/live_sample_1000_request.json)
+- Data diversity coverage:
+  - timestamps spread across the prior month (up to 30 days old)
+  - mixed currencies/country/provider/payment-method/status combinations
+  - full + partial capture amounts to exercise capture-readiness paths
+
+### Demo seeded test call
 
 ```bash
 make analytics-local
@@ -88,6 +97,15 @@ Use a remote URL if needed:
 ```bash
 API_URL=https://currency-hedge-calculator-production.up.railway.app make analytics-local
 ```
+
+### Postman assets
+
+- Collection: [`docs/postman/currency-hedge-calculator.postman_collection.json`](docs/postman/currency-hedge-calculator.postman_collection.json)
+- Environment: [`docs/postman/currency-hedge-calculator.postman_environment.json`](docs/postman/currency-hedge-calculator.postman_environment.json)
+- Includes all APIs with:
+  - plain template requests for manual input
+  - seeded demo requests
+  - production live-simulation requests with 50/100/1000 transaction payloads
 
 ## API Usage
 
